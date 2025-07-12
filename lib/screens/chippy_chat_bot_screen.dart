@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:hive/hive.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 
 import 'package:typewritertext/typewritertext.dart';
+
+import '../models/sms_model.dart';
 
 class ChatBody extends StatefulWidget {
   const ChatBody({Key? key}) : super(key: key);
@@ -30,6 +33,100 @@ class _ChatBodyState extends State<ChatBody> {
     _getInitialGreeting();
   }
 
+
+
+
+  Future<void> _tagUntaggedSendersInBackground() async {
+    print("Starting _tagUntaggedSendersInBackground...");
+    final smsBox = await Hive.openBox<SmsModel>('smsBox');
+    print("smsBox has ${smsBox.length} SMSs");
+    final tagBox = Hive.box<Map>('tagBox');
+
+    //Box<String> tagBox;
+    //final tagBox = await Hive.openBox<String>('tagBox');
+
+    // if (Hive.isBoxOpen('tagBox')) {
+    //   // tagBox = Hive.box<String>('tagBox');
+    // } else {
+    //   // tagBox = await Hive.openBox<String>('tagBox');
+    // }
+
+
+    final smsList = smsBox.values.toList();
+    final untaggedSenders = smsBox.values
+        .where((sms) => sms.tag == null || sms.tag == 'Untagged')
+        .map((sms) => sms.sender)
+        .toSet()
+        .toList();
+    print("smsBox has ${untaggedSenders} ${smsList}");
+    final Set<String> processedSenders = {};
+
+    for (var i = 0; i < untaggedSenders.length; i += 15) {
+      final batch = untaggedSenders.skip(i).take(15).toList();
+      final tagMap = await fetchTagForSender(batch);
+
+      // Update Hive with the new tags
+      for (final sender in batch) {
+        final tag = tagMap[sender] ?? 'Untagged';
+        tagBox.put(sender, {"tag":tag});
+        // Optionally, update the tag in each SMS as well
+        for (final sms in smsBox.values.where((sms) => sms.sender == sender)) {
+          smsBox.put(sms.key, sms.copyWith(tag: tag));
+        }
+      }
+    }
+  }
+
+
+
+  Future<Map<String, String>>  fetchTagForSender(List<String> senders) async {
+    try {
+
+      Map<String, dynamic> data = {
+        "From": "",
+        "secret_key":"83ff2da7b5278d22ab0f4998591c2989",
+        "unique_session_id":"4b6bb5d9-4157-4d78-bee4-c799d47a770e", //"802d5f2a-6d54-40a5-932b-e98924b96e1c" "db60b026-8728-4408-9ec1-43a76e4c19a4" "b4a75ba6-12d3-4afa-bb28-45fce007ecb1"
+        "user_message":senders.toString(),
+      };
+      print(senders.toString());
+      String jsonBody = json.encode(data);
+
+      final response = await http.post(
+        Uri.parse('https://www.omnidim.io/chat/start_chat'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonBody,
+      );
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> decoded = json.decode(response.body);
+        debugPrint('\n=======================================\n');
+        debugPrint('Tags: ${decoded['cycle_data']['content']}');
+        Map<String, dynamic>? tagSection;
+        if (decoded['cycle_data'] != null && decoded['cycle_data']['content'] != null) {
+          Map<String, dynamic> content = json.decode(decoded['cycle_data']?['content']);
+          if (content is Map<String, dynamic>) {
+            tagSection = content;
+          } else if (content is Map) {
+            tagSection = Map<String, dynamic>.from(content);
+          } else if (decoded['response'] != null) {
+            tagSection = decoded['response'];
+          }
+
+        } else if (decoded['response'] != null) {
+          tagSection = decoded['response'];
+        }
+        //debugPrint('Tags: ${decoded}');
+        if (tagSection != null) {
+          // Make sure tagSection is Map<String, dynamic>
+          return tagSection.map((k, v) => MapEntry(k, v.toString()));
+        }
+
+      }
+    } catch (e) {
+      debugPrint('Tag fetch failed for ${senders.toString()}: $e');
+    }
+    return {for (var s in senders) s: 'Untagged'};
+  }
+
   Future<void> _getInitialGreeting() async {
     // Send empty message to get AI greeting and add to chat
     String aiReply = await sendJsonData("who r u");
@@ -41,6 +138,32 @@ class _ChatBodyState extends State<ChatBody> {
       ));
     });
   }
+  // Returns (cleanedMessage, jsonData) where jsonData is null if no !POST present
+  Map<String, dynamic>? extractPostJson(String aiReply, {String marker = "!POST//"}) {
+    if (aiReply.contains(marker)) {
+      final parts = aiReply.split(marker);
+      final cleanedMessage = parts[0].trim();
+      final jsonStr = parts[1].trim();
+      try {
+        final jsonData = json.decode(jsonStr);
+        return {
+          'message': cleanedMessage,
+          'json': jsonData,
+        };
+      } catch (e) {
+        // If JSON parsing fails, just return the original message
+        return {
+          'message': aiReply,
+          'json': null,
+        };
+      }
+    }
+    return {
+      'message': aiReply,
+      'json': null,
+    };
+  }
+
 
   Future<void> _sendMessage() async {
     String userInput = _controller.text.trim();
@@ -55,10 +178,52 @@ class _ChatBodyState extends State<ChatBody> {
       _isTyping = true;
     });
     String aiReply = await sendJsonData(userInput);
+    print("aiReply========="+aiReply);
+    Map<String, dynamic>? result = extractPostJson(aiReply);
+    final cleanedMessage = result?['message'];
+    final jsonData = result?['json'];
+    print(result.toString());
+    try{
+      print(cleanedMessage+"========="+jsonData);
+    }
+    catch(e)
+    {
+
+    }
+
+    if (jsonData != null) {
+      final smsBox =  Hive.box<SmsModel>('smsBox');
+      final smsList = smsBox.values.toList();
+      print("smsBox has  ${smsList}");
+
+      smsBox.add(
+        SmsModel(
+          sender: jsonData['sender'] ?? '',
+          body: "Added By ChatBot:$jsonData", // or jsonData['body'] if provided
+          receivedAt: DateTime.parse(jsonData['receivedAt']),
+          amount: (jsonData['amount'] is int)
+              ? (jsonData['amount'] as int).toDouble()
+              : (jsonData['amount'] as num?)?.toDouble(),
+          type: jsonData['type'],
+          tag: null,
+
+        ),
+      );
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Transaction added successfully!'),
+          backgroundColor: Colors.green,
+          duration: Duration(seconds: 2),
+        ),
+      );
+      _tagUntaggedSendersInBackground();
+
+    }
+
     setState(() {
       _isTyping = false;
       _messages.add(ChatMessage(
-        text: aiReply,
+        text: cleanedMessage,
         timestamp: DateTime.now(),
         isUser: false,
       ));
@@ -71,8 +236,8 @@ class _ChatBodyState extends State<ChatBody> {
     Map<String, dynamic> data = {
       "From": "",
       "user_message": userInput,
-      "secret_key":
-          "6d4617ad886cdea88b20f17d2238ef0d" //fb1d9464ec4c1764190725ab860e2a52            //6d4617ad886cdea88b20f17d2238ef0d
+    "unique_session_id": "3c1d9ea7-3b5d-47f8-a79a-f6998a2bc92f",
+      "secret_key": "6d4617ad886cdea88b20f17d2238ef0d" //fb1d9464ec4c1764190725ab860e2a52            //6d4617ad886cdea88b20f17d2238ef0d
     };
 
     // Convert Dart map to JSON string

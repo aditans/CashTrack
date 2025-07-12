@@ -101,7 +101,7 @@ Future<void> main() async {
       Map<String, dynamic> data = {
         "From": "",
         "secret_key":"83ff2da7b5278d22ab0f4998591c2989",
-        "unique_session_id":"039ea214-6823-47d4-a297-08e94f651d54",
+        "unique_session_id":"4b6bb5d9-4157-4d78-bee4-c799d47a770e", //"802d5f2a-6d54-40a5-932b-e98924b96e1c" "db60b026-8728-4408-9ec1-43a76e4c19a4" "b4a75ba6-12d3-4afa-bb28-45fce007ecb1"
         "user_message":senders.toString(),
       };
       print(senders.toString());
@@ -197,7 +197,7 @@ Future<void> main() async {
           tag: parsed['tag'],
         );
         Hive.box<SmsModel>('smsBox').add(sms);
-        _tagUntaggedSendersInBackground();
+
         //REMOVE THIS
 
         //notification
@@ -214,6 +214,7 @@ Future<void> main() async {
           sms.body,
           NotificationDetails(android: androidDetails),
         );
+        _tagUntaggedSendersInBackground();
       },
     );
   }
