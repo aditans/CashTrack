@@ -230,6 +230,7 @@ class _ChatBodyState extends State<ChatBody> {
     });
     _controller.clear();
   }
+  final bitch=null;
 
   Future<String> sendJsonData(String userInput) async {
     // Your data as a Dart map
