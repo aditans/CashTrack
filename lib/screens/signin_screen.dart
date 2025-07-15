@@ -10,6 +10,7 @@ import 'package:cashtrack/models/uid_extraction.dart';
 import '../main.dart'; // for openUserBox()
 import '../services/database_service.dart';
 import '../services/hive_utils.dart'; // Import the DatabaseService
+ User? global_user=null;
 class SignInScreen extends StatefulWidget {
   const SignInScreen({super.key});
 
@@ -22,7 +23,40 @@ class _SignInScreenState extends State<SignInScreen> {
   String? _errorMessage;
 
   final DatabaseService _databaseService = DatabaseService();
+  //
 
+
+  ////////////////////////////
+  final GoogleSignIn _googleSignIn = GoogleSignIn.instance;
+  bool _isGoogleSignInInitialized = false;
+  //
+  //
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeGoogleSignIn();
+  }
+
+  Future<void> _initializeGoogleSignIn() async {
+    try {
+      await _googleSignIn.initialize(
+        serverClientId: '150056506896-t9pp4l1guro7g7bjhodf5gd882tolk4r.apps.googleusercontent.com', // Your Web Client ID
+
+      );
+      setState(() {
+        _isGoogleSignInInitialized = true;
+      });
+      print("✅ Google Sign-In initialized.");
+    } catch (e) {
+      print("❌ Failed to initialize Google Sign-In: $e");
+      setState(() {
+        _errorMessage = "Failed to initialize Google Sign-In.";
+        _isGoogleSignInInitialized = false;
+      });
+    }
+  }
+  //////////////////////////////
   Future<void> _onGoogleSignIn() async {
     setState(() {
       _isLoading = true;
@@ -31,7 +65,19 @@ class _SignInScreenState extends State<SignInScreen> {
 
     try {
       // Trigger Google Sign-In flow
-      final GoogleSignInAccount? googleUser = await GoogleSignIn().signIn();
+
+      //////////////////////////////////////
+
+        if (!_isGoogleSignInInitialized) {
+          await _initializeGoogleSignIn();
+        }
+        final stringy = "150056506896-t9pp4l1guro7g7bjhodf5gd882tolk4r.apps.googleusercontent.com";
+        final GoogleSignInAccount? googleUser = await _googleSignIn.authenticate(
+
+          scopeHint: ['email'],
+        );
+      //////////////////////////////////////
+      //final GoogleSignInAccount? googleUser = await GoogleSignIn().SignIn();
 
       if (googleUser == null) {
         // User cancelled the sign-in
@@ -43,10 +89,13 @@ class _SignInScreenState extends State<SignInScreen> {
 
       // Get Google authentication details
       final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
-
-      // Create Firebase credential
+////////////////////////////////////////
+        final authClient = _googleSignIn.authorizationClient;
+        final authorization = await authClient.authorizationForScopes(['email']);
+////////////////////////////////////////////
+        // Create Firebase credential
       final OAuthCredential credential = GoogleAuthProvider.credential(
-        accessToken: googleAuth.accessToken,
+        accessToken: authorization?.accessToken,
         idToken: googleAuth.idToken,
       );
 
@@ -54,8 +103,13 @@ class _SignInScreenState extends State<SignInScreen> {
       final UserCredential userCredential = await FirebaseAuth.instance.signInWithCredential(credential);
       final User? user = userCredential.user;
 
+
       if (user == null) {
         throw Exception('Authentication failed - no user returned');
+      }
+      else{
+        global_user = user;
+        print(global_user?.photoURL);
       }
 
       final String fullUid = user.uid;

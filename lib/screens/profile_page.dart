@@ -36,9 +36,12 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Future<void> _logout() async {
-    await GoogleSignIn().signOut();
+    //await GoogleSignIn().signOut();
+    /////////////////////////////////////////////////////////////////////////
+    final GoogleSignIn _googleSignIn = GoogleSignIn.instance;
+    await _googleSignIn.signOut();
     await FirebaseAuth.instance.signOut();
-
+    /////////////////////////////////////////////////////////////////////////
     Navigator.pushAndRemoveUntil(
       context,
       MaterialPageRoute(builder: (_) => const AuthGate()),

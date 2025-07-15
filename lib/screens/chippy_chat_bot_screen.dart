@@ -125,7 +125,7 @@ class _ChatBodyState extends State<ChatBody> {
 
   Future<void> _getInitialGreeting() async {
 
-    String aiReply = await sendJsonData("who r u");
+    String aiReply = await sendJsonData("","6d4617ad886cdea88b20f17d2238ef0d","b2c968f7-a1c5-4267-99be-fc9c387dc0f1");
     setState(() {
       _messages.add(ChatMessage(
         text: aiReply,
@@ -137,102 +137,7 @@ class _ChatBodyState extends State<ChatBody> {
 
   String? _pendingAnalysisSelection;
 
-  Future<void> _attachSelectedAnalysisToInput(String selection) async {
-    final smsBox = Hive.box<SmsModel>('smsBox');
-    final smsList = smsBox.values.toList();
-    final months = [
-      'January', 'February', 'March', 'April', 'May', 'June',
-      'July', 'August', 'September', 'October', 'November', 'December'
-    ];
 
-    StringBuffer analysis = StringBuffer();
-
-    if (selection.startsWith('This Week')) {
-      // Get current week range
-      final now = DateTime.now();
-      final startOfWeek = now.subtract(Duration(days: now.weekday - 1));
-      final endOfWeek = startOfWeek.add(Duration(days: 6));
-      Map<String, double> tagTotals = {};
-      for (var sms in smsList) {
-        if (sms.amount != null &&
-            sms.receivedAt.isAfter(startOfWeek.subtract(const Duration(seconds: 1))) &&
-            sms.receivedAt.isBefore(endOfWeek.add(const Duration(days: 1)))) {
-          if (sms.tag != null && sms.tag != 'Untagged') {
-            tagTotals[sms.tag!] = (tagTotals[sms.tag!] ?? 0) + sms.amount!;
-          }
-        }
-      }
-      analysis.writeln("!POST//This Week's Tag Breakdown:");
-      tagTotals.forEach((tag, total) => analysis.writeln("$tag: ₹${total.toStringAsFixed(2)}"));
-    } else if (selection.startsWith('Monthly')) {
-      final parts = selection.split('|');
-      if (parts.length >= 3) {
-        final monthName = parts[1];
-        final yearStr = parts[2];
-        final monthIndex = months.indexOf(monthName) + 1;
-        final year = int.tryParse(yearStr) ?? DateTime.now().year;
-        Map<String, double> tagTotals = {};
-        for (var sms in smsList) {
-          if (sms.amount != null &&
-              sms.receivedAt.year == year &&
-              sms.receivedAt.month == monthIndex) {
-            if (sms.tag != null && sms.tag != 'Untagged') {
-              tagTotals[sms.tag!] = (tagTotals[sms.tag!] ?? 0) + sms.amount!;
-            }
-          }
-        }
-        analysis.writeln("!POST//Monthly Tag Breakdown for $monthName $year:");
-        tagTotals.forEach((tag, total) => analysis.writeln("$tag: ₹${total.toStringAsFixed(2)}"));
-      }
-    } else if (selection.startsWith('Yearly')) {
-      final parts = selection.split('|');
-      if (parts.length >= 2) {
-        final yearStr = parts[1];
-        final year = int.tryParse(yearStr) ?? DateTime.now().year;
-        Map<String, double> tagTotals = {};
-        for (var sms in smsList) {
-          if (sms.amount != null && sms.receivedAt.year == year) {
-            if (sms.tag != null && sms.tag != 'Untagged') {
-              tagTotals[sms.tag!] = (tagTotals[sms.tag!] ?? 0) + sms.amount!;
-            }
-          }
-        }
-        analysis.writeln("!POST//Yearly Tag Breakdown for $year:");
-        tagTotals.forEach((tag, total) => analysis.writeln("$tag: ₹${total.toStringAsFixed(2)}"));
-      }
-    } else if (selection.startsWith('Custom')) {
-      // Assume selectedMonth is a date string like '2025-07-14'
-      final parts = selection.split('|');
-      if (parts.length >= 2) {
-        final dateStr = parts[1];
-        final date = DateTime.tryParse(dateStr);
-        if (date != null) {
-          Map<String, double> tagTotals = {};
-          for (var sms in smsList) {
-            if (sms.amount != null &&
-                sms.receivedAt.year == date.year &&
-                sms.receivedAt.month == date.month &&
-                sms.receivedAt.day == date.day) {
-              if (sms.tag != null && sms.tag != 'Untagged') {
-                tagTotals[sms.tag!] = (tagTotals[sms.tag!] ?? 0) + sms.amount!;
-              }
-            }
-          }
-          analysis.writeln("!POST//Custom Tag Breakdown for $dateStr:");
-          tagTotals.forEach((tag, total) => analysis.writeln("$tag: ₹${total.toStringAsFixed(2)}"));
-        }
-      }
-    }
-
-    // Append analysis to the input field (not sending)
-    final userInput = _controller.text.trim();
-    _controller.text = userInput.isEmpty
-        ? analysis.toString()
-        : "$userInput\n\n${analysis.toString()}";
-    _controller.selection = TextSelection.fromPosition(
-      TextPosition(offset: _controller.text.length),
-    );
-  }
 
 
 
@@ -498,7 +403,7 @@ class _ChatBodyState extends State<ChatBody> {
 
 
 
-  Future<void> _sendMessage() async {
+  Future<void> _sendMessage(String secret_key,String session) async {
     String userInput = _controller.text.trim();
     if (_controller.text.trim().isEmpty) return;
 
@@ -528,7 +433,7 @@ class _ChatBodyState extends State<ChatBody> {
       _controller.clear();
       _isTyping = true;
     });
-    String aiReply = await sendJsonData(combinedMessage);
+    String aiReply = await sendJsonData(combinedMessage,secret_key,session);
     print("aiReply========="+aiReply);
     Map<String, dynamic>? result = extractPostJson(aiReply);
     final cleanedMessage = result?['message'];
@@ -591,15 +496,15 @@ class _ChatBodyState extends State<ChatBody> {
   }
   //final bitch=null;
 
-  Future<String> sendJsonData(String userInput) async {
+  Future<String> sendJsonData(String userInput,String secret_key,String session) async {
     // Your data as a Dart map
     Map<String, dynamic> data = {
       "From": "",
       "user_message": userInput,
-    "unique_session_id":
-    "a4ca0b45-bd81-4fed-9a11-a36e09151b7f"
+    "unique_session_id":session
+
       ,
-      "secret_key": "6d4617ad886cdea88b20f17d2238ef0d" //fb1d9464ec4c1764190725ab860e2a52            //6d4617ad886cdea88b20f17d2238ef0d
+      "secret_key":secret_key //fb1d9464ec4c1764190725ab860e2a52            //6d4617ad886cdea88b20f17d2238ef0d
     };
 
     // Convert Dart map to JSON string
@@ -926,7 +831,7 @@ class _ChatBodyState extends State<ChatBody> {
                               color: Colors.grey.shade400, width: 1.5),
                         ),
                       ),
-                      onSubmitted: (value) => _sendMessage(),
+                      onSubmitted: (value) =>_pendingAnalysisSelection != null?_sendMessage("32510dc17e1a7d11120ca32bcf0339a5","bea0e018-077c-40c6-bbcc-9e64191e6d35") :_sendMessage("6d4617ad886cdea88b20f17d2238ef0d","b2c968f7-a1c5-4267-99be-fc9c387dc0f1"),
                     ),
                   ),
                   SizedBox(width: 8),
@@ -934,7 +839,7 @@ class _ChatBodyState extends State<ChatBody> {
                   SizedBox(
                     height: 48,
                     child: ElevatedButton(
-                      onPressed: _sendMessage,
+                      onPressed: () => _pendingAnalysisSelection != null?_sendMessage("32510dc17e1a7d11120ca32bcf0339a5","bea0e018-077c-40c6-bbcc-9e64191e6d35") :_sendMessage("6d4617ad886cdea88b20f17d2238ef0d","b2c968f7-a1c5-4267-99be-fc9c387dc0f1"),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Color(0xFF10B6C5), // Teal blue
                         shape: RoundedRectangleBorder(

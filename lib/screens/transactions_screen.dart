@@ -1,9 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
 
-
 import 'package:cashtrack/screens/home_screen.dart';
 import 'package:cashtrack/screens/profile_page.dart';
+import 'package:cashtrack/screens/signin_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cashtrack/screens/skillup_page.dart';
 import 'package:cashtrack/screens/splits_page.dart';
@@ -18,9 +18,9 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import '../models/sms_model.dart';
 import 'chippy_chat_bot_screen.dart';
 import 'manual_expense_page.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
-int current_index=0
-;
+int current_index = 0;
 
 //List<Widget> pages=[Home(),SkillUp(),Transaction(),Splits()];
 
@@ -60,21 +60,16 @@ class _TransactionsBodyState extends State<TransactionsBody> {
 //   </html>
 // ''';
 
-
-
-
   Timer? _taggingTimer;
-
+  User? user = global_user;
   @override
   void initState() {
     super.initState();
+
     //final smsBox = Hive.box<SmsModel>('smsBox');
 
-
-
-
     // _taggingTimer = Timer.periodic(const Duration(minutes: 3), (timer) {
-       _tagUntaggedSendersInBackground();
+    _tagUntaggedSendersInBackground();
     // });
     // _controller = WebViewController()
     //
@@ -88,11 +83,11 @@ class _TransactionsBodyState extends State<TransactionsBody> {
     //     mimeType: 'text/html',
     //     encoding: Encoding.getByName('utf-8'),
     //   ));
-
   }
+
   Future<void> _tagUntaggedSendersInBackground() async {
     print("Starting _tagUntaggedSendersInBackground...");
-    final smsBox =  Hive.box<SmsModel>('smsBox');
+    final smsBox = Hive.box<SmsModel>('smsBox');
     print("smsBox has ${smsBox.length} SMSs");
     final tagBox = Hive.box<Map>('tagBox');
 
@@ -104,7 +99,6 @@ class _TransactionsBodyState extends State<TransactionsBody> {
     // } else {
     //   // tagBox = await Hive.openBox<String>('tagBox');
     // }
-
 
     final smsList = smsBox.values.toList();
     final untaggedSenders = smsBox.values
@@ -123,7 +117,7 @@ class _TransactionsBodyState extends State<TransactionsBody> {
       // Update Hive with the new tags
       for (final sender in batch) {
         final tag = tagMap[sender] ?? 'Untagged';
-        tagBox.put(sender, {"tag":tag});
+        tagBox.put(sender, {"tag": tag});
         // Optionally, update the tag in each SMS as well
         for (final sms in smsBox.values.where((sms) => sms.sender == sender)) {
           smsBox.put(sms.key, sms.copyWith(tag: tag));
@@ -135,17 +129,14 @@ class _TransactionsBodyState extends State<TransactionsBody> {
     }
   }
 
-
-
-
-  Future<Map<String, String>>  fetchTagForSender(List<String> senders) async {
+  Future<Map<String, String>> fetchTagForSender(List<String> senders) async {
     try {
-
       Map<String, dynamic> data = {
         "From": "",
-        "secret_key":"83ff2da7b5278d22ab0f4998591c2989",
-        "unique_session_id":"27bdbd63-4cd1-4d83-afea-9b1d4d983cff", //"802d5f2a-6d54-40a5-932b-e98924b96e1c" "db60b026-8728-4408-9ec1-43a76e4c19a4" "b4a75ba6-12d3-4afa-bb28-45fce007ecb1"
-        "user_message":senders.toString(),
+        "secret_key": "83ff2da7b5278d22ab0f4998591c2989",
+        "unique_session_id":
+            "27bdbd63-4cd1-4d83-afea-9b1d4d983cff", //"802d5f2a-6d54-40a5-932b-e98924b96e1c" "db60b026-8728-4408-9ec1-43a76e4c19a4" "b4a75ba6-12d3-4afa-bb28-45fce007ecb1"
+        "user_message": senders.toString(),
       };
       print(senders.toString());
       String jsonBody = json.encode(data);
@@ -160,8 +151,10 @@ class _TransactionsBodyState extends State<TransactionsBody> {
         debugPrint('\n=======================================\n');
         debugPrint('Tags: ${decoded['cycle_data']['content']}');
         Map<String, dynamic>? tagSection;
-        if (decoded['cycle_data'] != null && decoded['cycle_data']['content'] != null) {
-          Map<String, dynamic> content = json.decode(decoded['cycle_data']?['content']);
+        if (decoded['cycle_data'] != null &&
+            decoded['cycle_data']['content'] != null) {
+          Map<String, dynamic> content =
+              json.decode(decoded['cycle_data']?['content']);
           if (content is Map<String, dynamic>) {
             tagSection = content;
           } else if (content is Map) {
@@ -169,7 +162,6 @@ class _TransactionsBodyState extends State<TransactionsBody> {
           } else if (decoded['response'] != null) {
             tagSection = decoded['response'];
           }
-
         } else if (decoded['response'] != null) {
           tagSection = decoded['response'];
         }
@@ -178,19 +170,18 @@ class _TransactionsBodyState extends State<TransactionsBody> {
           // Make sure tagSection is Map<String, dynamic>
           return tagSection.map((k, v) => MapEntry(k, v.toString()));
         }
-
       }
     } catch (e) {
       debugPrint('Tag fetch failed for ${senders.toString()}: $e');
     }
     return {for (var s in senders) s: 'Untagged'};
   }
+
   @override
   void dispose() {
     _taggingTimer?.cancel();
     super.dispose();
   }
-
 
   bool isExpanded = false;
   @override
@@ -201,8 +192,6 @@ class _TransactionsBodyState extends State<TransactionsBody> {
     final Color regentGray = Color(0xFF949FA5);
     final deviceWidth = MediaQuery.of(context).size.width;
 
-
-
 // Calculate width and height based on isExpanded
     var width = 200.0;
     var height = 100.0;
@@ -212,10 +201,15 @@ class _TransactionsBodyState extends State<TransactionsBody> {
       ChatBody(),
       SplitsBody(),
     ];
-    User? user = FirebaseAuth.instance.currentUser;
+
+    Future<User?> _fetchCurrentUser() async {
+      // In real world, you might perform a refresh here
+      return FirebaseAuth.instance.currentUser;
+    }
+
     String? photoUrl = user?.photoURL;
     return Scaffold(
-      appBar:  AppBar(
+      appBar: AppBar(
         backgroundColor: turquoiseBlue,
         elevation: 0,
         automaticallyImplyLeading: false,
@@ -232,12 +226,13 @@ class _TransactionsBodyState extends State<TransactionsBody> {
                 height: 45,
               ),
             ),
-
             const SizedBox(width: 8),
             const Text(
               'CASHTRACK',
               style: TextStyle(
-                  color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+                  color: Colors.white,
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold),
             ),
           ],
         ),
@@ -246,23 +241,36 @@ class _TransactionsBodyState extends State<TransactionsBody> {
             icon: CircleAvatar(
               radius: 30,
               backgroundColor: Colors.white,
-              backgroundImage: photoUrl != null
-                  ? NetworkImage(photoUrl)
-                  : AssetImage('assets/logo.png') as ImageProvider,
+              child: ClipOval(
+                child: user?.photoURL != null
+                    ? CachedNetworkImage(
+                        imageUrl: user!.photoURL!,
+                        placeholder: (context, url) => Center(
+                          child: SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        ),
+                        errorWidget: (context, url, error) => Image.asset(
+                            'assets/profile-logo.png',
+                            fit: BoxFit.contain),
+                        fit: BoxFit.contain,
+                      )
+                    : Image.asset('assets/profile-logo.png',
+                        fit: BoxFit.contain),
+              ),
             ),
             onPressed: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(
-                  builder: (_) => ProfilePage(),
-                ),
+                MaterialPageRoute(builder: (_) => ProfilePage()),
               );
             },
           ),
         ],
-
       ),
-      body:Stack(
+      body: Stack(
         children: [
           // Background image
 
@@ -271,9 +279,14 @@ class _TransactionsBodyState extends State<TransactionsBody> {
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 colors: [
-                  Color.fromRGBO(255, 255, 255, 0.0), // Start color with opacity
                   Color.fromRGBO(
-                    183, 208, 227, 1.0,  ),           // End color (transparent)
+                      255, 255, 255, 0.0), // Start color with opacity
+                  Color.fromRGBO(
+                    183,
+                    208,
+                    227,
+                    1.0,
+                  ), // End color (transparent)
                 ],
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
@@ -296,23 +309,20 @@ class _TransactionsBodyState extends State<TransactionsBody> {
           )
         ],
       ),
-
-
-
-
       bottomNavigationBar: FractionallySizedBox(
-
-
         child: BottomNavigationBar(
           type: BottomNavigationBarType.fixed,
           unselectedItemColor: Color.fromRGBO(48, 65, 76, 1.0),
           selectedItemColor: Color.fromRGBO(0, 184, 217, 1.0),
           showUnselectedLabels: true,
           iconSize: 30,
-          onTap: (index) {setState(() {
-            current_index=index;
-          });},
-          selectedLabelStyle: TextStyle(fontSize: 13,fontWeight: FontWeight.bold),
+          onTap: (index) {
+            setState(() {
+              current_index = index;
+            });
+          },
+          selectedLabelStyle:
+              TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
           unselectedLabelStyle: TextStyle(fontSize: 13),
           currentIndex: current_index,
           items: const [
@@ -343,22 +353,18 @@ class _TransactionsBodyState extends State<TransactionsBody> {
           ],
         ),
       ),
-
       floatingActionButton: current_index == 0
           ? FloatingActionButton(
-        backgroundColor: Color(0xFF7A5AF8),
-        child: Icon(Icons.add),
-        onPressed: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const ManualExpensePage()),
-          );
-        },
-      )
+              backgroundColor: Color(0xFF7A5AF8),
+              child: Icon(Icons.add),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const ManualExpensePage()),
+                );
+              },
+            )
           : null,
-
     );
   }
 }
-
-
