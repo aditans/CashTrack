@@ -36,9 +36,9 @@ class _ChatBodyState extends State<ChatBody> {
 
 
 
-  Future<void> _tagUntaggedSendersInBackground() async {
+  Future<void> _ONEtagUntaggedSendersInBackground() async {
     print("Starting _tagUntaggedSendersInBackground...");
-    final smsBox = await Hive.openBox<SmsModel>('smsBox');
+    final smsBox = Hive.box<SmsModel>('smsBox');
     print("smsBox has ${smsBox.length} SMSs");
     final tagBox = Hive.box<Map>('tagBox');
 
@@ -58,23 +58,23 @@ class _ChatBodyState extends State<ChatBody> {
         .map((sms) => sms.sender)
         .toSet()
         .toList();
-    print("smsBox has ${untaggedSenders} ${smsList}");
+    print("smsBox has ${untaggedSenders.length} ${smsList.length}");
     final Set<String> processedSenders = {};
 
-    for (var i = 0; i < untaggedSenders.length; i += 15) {
-      final batch = untaggedSenders.skip(i).take(15).toList();
-      final tagMap = await fetchTagForSender(batch);
 
-      // Update Hive with the new tags
-      for (final sender in batch) {
-        final tag = tagMap[sender] ?? 'Untagged';
-        tagBox.put(sender, {"tag":tag});
-        // Optionally, update the tag in each SMS as well
-        for (final sms in smsBox.values.where((sms) => sms.sender == sender)) {
-          smsBox.put(sms.key, sms.copyWith(tag: tag));
-        }
+    final batch = untaggedSenders.take(1).toList();
+    final tagMap = await fetchTagForSender(batch);
+
+    // Update Hive with the new tags
+    for (final sender in batch) {
+      final tag = tagMap[sender] ?? 'Untagged';
+      tagBox.put(sender, {"tag":tag});
+      // Optionally, update the tag in each SMS as well
+      for (final sms in smsBox.values.where((sms) => sms.sender == sender)) {
+        smsBox.put(sms.key, sms.copyWith(tag: tag));
       }
     }
+
   }
 
 
@@ -103,20 +103,14 @@ class _ChatBodyState extends State<ChatBody> {
         Map<String, dynamic>? tagSection;
         if (decoded['cycle_data'] != null && decoded['cycle_data']['content'] != null) {
           Map<String, dynamic> content = json.decode(decoded['cycle_data']?['content']);
-          if (content is Map<String, dynamic>) {
-            tagSection = content;
-          } else if (content is Map) {
-            tagSection = Map<String, dynamic>.from(content);
-          } else if (decoded['response'] != null) {
-            tagSection = decoded['response'];
-          }
+          tagSection = content;
 
         } else if (decoded['response'] != null) {
           tagSection = decoded['response'];
         }
         //debugPrint('Tags: ${decoded}');
         if (tagSection != null) {
-          // Make sure tagSection is Map<String, dynamic>
+
           return tagSection.map((k, v) => MapEntry(k, v.toString()));
         }
 
@@ -126,9 +120,11 @@ class _ChatBodyState extends State<ChatBody> {
     }
     return {for (var s in senders) s: 'Untagged'};
   }
+  final List<String> filterTypes = ['Month', 'Year', 'Day','Custom'];
+  String selectedFilter = 'Month';
 
   Future<void> _getInitialGreeting() async {
-    // Send empty message to get AI greeting and add to chat
+
     String aiReply = await sendJsonData("who r u");
     setState(() {
       _messages.add(ChatMessage(
@@ -138,7 +134,251 @@ class _ChatBodyState extends State<ChatBody> {
       ));
     });
   }
-  // Returns (cleanedMessage, jsonData) where jsonData is null if no !POST present
+
+  String? _pendingAnalysisSelection;
+
+  Future<void> _attachSelectedAnalysisToInput(String selection) async {
+    final smsBox = Hive.box<SmsModel>('smsBox');
+    final smsList = smsBox.values.toList();
+    final months = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December'
+    ];
+
+    StringBuffer analysis = StringBuffer();
+
+    if (selection.startsWith('This Week')) {
+      // Get current week range
+      final now = DateTime.now();
+      final startOfWeek = now.subtract(Duration(days: now.weekday - 1));
+      final endOfWeek = startOfWeek.add(Duration(days: 6));
+      Map<String, double> tagTotals = {};
+      for (var sms in smsList) {
+        if (sms.amount != null &&
+            sms.receivedAt.isAfter(startOfWeek.subtract(const Duration(seconds: 1))) &&
+            sms.receivedAt.isBefore(endOfWeek.add(const Duration(days: 1)))) {
+          if (sms.tag != null && sms.tag != 'Untagged') {
+            tagTotals[sms.tag!] = (tagTotals[sms.tag!] ?? 0) + sms.amount!;
+          }
+        }
+      }
+      analysis.writeln("!POST//This Week's Tag Breakdown:");
+      tagTotals.forEach((tag, total) => analysis.writeln("$tag: ₹${total.toStringAsFixed(2)}"));
+    } else if (selection.startsWith('Monthly')) {
+      final parts = selection.split('|');
+      if (parts.length >= 3) {
+        final monthName = parts[1];
+        final yearStr = parts[2];
+        final monthIndex = months.indexOf(monthName) + 1;
+        final year = int.tryParse(yearStr) ?? DateTime.now().year;
+        Map<String, double> tagTotals = {};
+        for (var sms in smsList) {
+          if (sms.amount != null &&
+              sms.receivedAt.year == year &&
+              sms.receivedAt.month == monthIndex) {
+            if (sms.tag != null && sms.tag != 'Untagged') {
+              tagTotals[sms.tag!] = (tagTotals[sms.tag!] ?? 0) + sms.amount!;
+            }
+          }
+        }
+        analysis.writeln("!POST//Monthly Tag Breakdown for $monthName $year:");
+        tagTotals.forEach((tag, total) => analysis.writeln("$tag: ₹${total.toStringAsFixed(2)}"));
+      }
+    } else if (selection.startsWith('Yearly')) {
+      final parts = selection.split('|');
+      if (parts.length >= 2) {
+        final yearStr = parts[1];
+        final year = int.tryParse(yearStr) ?? DateTime.now().year;
+        Map<String, double> tagTotals = {};
+        for (var sms in smsList) {
+          if (sms.amount != null && sms.receivedAt.year == year) {
+            if (sms.tag != null && sms.tag != 'Untagged') {
+              tagTotals[sms.tag!] = (tagTotals[sms.tag!] ?? 0) + sms.amount!;
+            }
+          }
+        }
+        analysis.writeln("!POST//Yearly Tag Breakdown for $year:");
+        tagTotals.forEach((tag, total) => analysis.writeln("$tag: ₹${total.toStringAsFixed(2)}"));
+      }
+    } else if (selection.startsWith('Custom')) {
+      // Assume selectedMonth is a date string like '2025-07-14'
+      final parts = selection.split('|');
+      if (parts.length >= 2) {
+        final dateStr = parts[1];
+        final date = DateTime.tryParse(dateStr);
+        if (date != null) {
+          Map<String, double> tagTotals = {};
+          for (var sms in smsList) {
+            if (sms.amount != null &&
+                sms.receivedAt.year == date.year &&
+                sms.receivedAt.month == date.month &&
+                sms.receivedAt.day == date.day) {
+              if (sms.tag != null && sms.tag != 'Untagged') {
+                tagTotals[sms.tag!] = (tagTotals[sms.tag!] ?? 0) + sms.amount!;
+              }
+            }
+          }
+          analysis.writeln("!POST//Custom Tag Breakdown for $dateStr:");
+          tagTotals.forEach((tag, total) => analysis.writeln("$tag: ₹${total.toStringAsFixed(2)}"));
+        }
+      }
+    }
+
+    // Append analysis to the input field (not sending)
+    final userInput = _controller.text.trim();
+    _controller.text = userInput.isEmpty
+        ? analysis.toString()
+        : "$userInput\n\n${analysis.toString()}";
+    _controller.selection = TextSelection.fromPosition(
+      TextPosition(offset: _controller.text.length),
+    );
+  }
+
+
+
+
+  void _showAnalysisModal() async {
+    final result = await showModalBottomSheet<String>(
+
+      context: context,
+      builder: (context) {
+        final currentYear = DateTime.now().year;
+        final months = [
+          'January', 'February', 'March', 'April', 'May', 'June',
+          'July', 'August', 'September', 'October', 'November', 'December'
+        ];
+        final years = List<String>.generate(10, (index) => (currentYear - index).toString());
+        String selected = 'This Week';
+        String? selectedMonth = months[DateTime.now().month-1];
+        String? selectedYear = years[0];
+        DateTime? startDate;
+        DateTime? endDate;
+
+
+
+
+        print(years);
+        return StatefulBuilder(
+
+          builder: (context, setModalState) {
+
+            if (selected == 'Monthly') {
+              selectedMonth ??= months[DateTime.now().month - 1];
+              selectedYear ??= years[0];
+            }
+            if (selected == 'Yearly') {
+              selectedYear ??= years[0];
+            }
+
+
+            return Padding(
+
+              padding: const EdgeInsets.all(16.0),
+              child: Container(
+                width: MediaQuery.of(context).size.width,
+                child: Column(
+
+
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Select Analysis Duration to attach', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                    SizedBox(height: 16),
+                    DropdownButton<String>(
+                      value: selected,
+                      items: ['This Week', 'Monthly', 'Yearly', 'Custom']
+                          .map((type) => DropdownMenuItem(value: type, child: Text(type)))
+                          .toList(),
+                      onChanged: (val) {
+                        setModalState(() {
+                          selected = val!;
+                          selectedMonth = null;
+                          selectedYear = null;
+                        });
+                      },
+                    ),
+                    SizedBox(height: 16),
+
+                    SizedBox(height: 16),
+                    if (selected == 'Monthly') ...[
+                      Text('Select Month'),
+                      DropdownButton<String>(
+                        value: selectedMonth ?? months[DateTime.now().month - 1],
+                        items: months.map((m) => DropdownMenuItem(value: m, child: Text(m))).toList(),
+                        onChanged: (val) => setModalState(() => selectedMonth = val),
+                      ),
+                      SizedBox(height: 16),
+                      Text('Select Year'),
+                      DropdownButton<String>(
+                        value: selectedYear ?? years[0],
+                        items: years.map((y) => DropdownMenuItem(value: y, child: Text(y))).toList(),
+                        onChanged: (val) => setModalState(() => selectedYear = val),
+                      ),
+                    ]
+                    else if (selected == 'Custom') ...[
+                      Text('Select Date Range'),
+                      ElevatedButton(
+                        onPressed: () async {
+                          final picked = await showDateRangePicker(
+                            context: context,
+                            firstDate: DateTime(2000),
+                            lastDate: DateTime.now(),
+                            initialDateRange: DateTimeRange(
+                              start: DateTime.now().subtract(Duration(days: 6)),
+                              end: DateTime.now(),
+                            ),
+                          );
+                          if (picked != null) {
+                            setModalState(() => selectedMonth = "${picked.start.toIso8601String().substring(0, 10)} to ${picked.end.toIso8601String().substring(0, 10)}");
+                            // Store both start and end dates as needed
+                            startDate = picked.start;
+                            endDate = picked.end;
+                          }
+                        },
+                        child: Text(selectedMonth ?? 'Pick a date range'),
+                      ),
+                    ]
+
+                    else if (selected == 'Yearly') ...[
+                      Text('Select Year'),
+                      DropdownButton<String>(
+                        value: selectedYear ?? years[0],
+                        items: years.map((y) => DropdownMenuItem(value: y, child: Text(y))).toList(),
+                        onChanged: (val) => setModalState(() => selectedYear = val),
+                      ),
+                    ],
+                    SizedBox(height: 16),
+                    ElevatedButton(
+                      onPressed: () {
+                        String result = selected;
+                        if (selected == 'Monthly' && selectedMonth != null && selectedYear != null) {
+                          result += '|$selectedMonth|$selectedYear';
+                        } else if (selected == 'Yearly' && selectedYear != null) {
+                          result += '|$selectedYear';
+                        } else if (selected == 'Custom' && selectedMonth != null) {
+                          result += '|${startDate?.toIso8601String().substring(0, 10)}|${endDate?.toIso8601String().substring(0, 10)}'; // Here, selectedMonth holds the custom date string
+                        }
+                        setState(() {
+                          _pendingAnalysisSelection = result;
+                          print(result);
+                        });
+                        Navigator.pop(context);
+                      },
+
+                      child: Text('Attach Analysis'),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+
+  }
+
+
   Map<String, dynamic>? extractPostJson(String aiReply, {String marker = "!POST//"}) {
     if (aiReply.contains(marker)) {
       final parts = aiReply.split(marker);
@@ -152,6 +392,7 @@ class _ChatBodyState extends State<ChatBody> {
         };
       } catch (e) {
         // If JSON parsing fails, just return the original message
+        print("ERRRRRRRRRRRRRRRORRRRRRR ${e.toString()}");
         return {
           'message': aiReply,
           'json': null,
@@ -163,28 +404,146 @@ class _ChatBodyState extends State<ChatBody> {
       'json': null,
     };
   }
+  Future<String> _generateAnalysis(String selection) async {
+    final smsBox = Hive.box<SmsModel>('smsBox');
+    final smsList = smsBox.values.toList();
+    final months = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December'
+    ];
+
+    StringBuffer analysis = StringBuffer();
+
+    if (selection.startsWith('This Week')) {
+      // Get current week range
+      final now = DateTime.now();
+      final startOfWeek = now.subtract(Duration(days: now.weekday - 1));
+      final endOfWeek = startOfWeek.add(Duration(days: 6));
+      Map<String, double> tagTotals = {};
+      for (var sms in smsList) {
+        if (sms.amount != null &&
+            sms.receivedAt.isAfter(startOfWeek.subtract(const Duration(seconds: 1))) &&
+            sms.receivedAt.isBefore(endOfWeek.add(const Duration(days: 1)))) {
+          if (sms.tag != null && sms.tag != 'Untagged') {
+            tagTotals[sms.tag!] = (tagTotals[sms.tag!] ?? 0) + sms.amount!;
+          }
+        }
+      }
+      analysis.writeln("!POST//This Week's Tag Breakdown:");
+      tagTotals.forEach((tag, total) => analysis.writeln("$tag: ₹${total.toStringAsFixed(2)}"));
+    } else if (selection.startsWith('Monthly')) {
+      final parts = selection.split('|');
+      if (parts.length >= 3) {
+        final monthName = parts[1];
+        final yearStr = parts[2];
+        final monthIndex = months.indexOf(monthName) + 1;
+        final year = int.tryParse(yearStr) ?? DateTime.now().year;
+        Map<String, double> tagTotals = {};
+        for (var sms in smsList) {
+          if (sms.amount != null &&
+              sms.receivedAt.year == year &&
+              sms.receivedAt.month == monthIndex) {
+            if (sms.tag != null && sms.tag != 'Untagged') {
+              tagTotals[sms.tag!] = (tagTotals[sms.tag!] ?? 0) + sms.amount!;
+            }
+          }
+        }
+        analysis.writeln("!POST//Monthly Tag Breakdown for $monthName $year:");
+        tagTotals.forEach((tag, total) => analysis.writeln("$tag: ₹${total.toStringAsFixed(2)}"));
+      }
+    } else if (selection.startsWith('Yearly')) {
+      final parts = selection.split('|');
+      if (parts.length >= 2) {
+        final yearStr = parts[1];
+        final year = int.tryParse(yearStr) ?? DateTime.now().year;
+        Map<String, double> tagTotals = {};
+        for (var sms in smsList) {
+          if (sms.amount != null && sms.receivedAt.year == year) {
+            if (sms.tag != null && sms.tag != 'Untagged') {
+              tagTotals[sms.tag!] = (tagTotals[sms.tag!] ?? 0) + sms.amount!;
+            }
+          }
+        }
+        analysis.writeln("!POST//Yearly Tag Breakdown for $year:");
+        tagTotals.forEach((tag, total) => analysis.writeln("$tag: ₹${total.toStringAsFixed(2)}"));
+      }
+    } else if (selection.startsWith('Custom')) {
+      // Format: 'Custom|YYYY-MM-DD|YYYY-MM-DD'
+      final parts = selection.split('|');
+      if (parts.length >= 3) {
+        final startStr = parts[1];
+        final endStr = parts[2];
+        final start = DateTime.tryParse(startStr);
+        final end = DateTime.tryParse(endStr);
+        if (start != null && end != null) {
+          Map<String, double> tagTotals = {};
+          for (var sms in smsList) {
+            if (sms.amount != null &&
+                !sms.receivedAt.isBefore(start) &&
+                !sms.receivedAt.isAfter(end)) {
+              if (sms.tag != null && sms.tag != 'Untagged') {
+                tagTotals[sms.tag!] = (tagTotals[sms.tag!] ?? 0) + sms.amount!;
+              }
+            }
+          }
+          analysis.writeln("!POST//Custom Tag Breakdown for $startStr to $endStr:");
+          tagTotals.forEach((tag, total) => analysis.writeln("$tag: ₹${total.toStringAsFixed(2)}"));
+        }
+      }
+    }
+    print(analysis.toString());
+
+    return analysis.toString();
+  }
+
 
 
   Future<void> _sendMessage() async {
     String userInput = _controller.text.trim();
     if (_controller.text.trim().isEmpty) return;
+
+    String combinedMessage = userInput;
+    if (_pendingAnalysisSelection != null) {
+      final analysis = await _generateAnalysis(_pendingAnalysisSelection!);
+      if (analysis.isNotEmpty) {
+        combinedMessage += "\n\n$analysis";
+      }
+      _pendingAnalysisSelection = null;
+    }
+
+
+    final analysisStart = userInput.indexOf("!POST//");
+    String visibleMessage = combinedMessage;
+    if (analysisStart != -1) {
+      visibleMessage = userInput.substring(0, analysisStart).trim();
+    }
+
+
     setState(() {
       _messages.add(ChatMessage(
-        text: _controller.text.trim(),
+        text: userInput,
         timestamp: DateTime.now(),
         isUser: true,
       ));
       _controller.clear();
       _isTyping = true;
     });
-    String aiReply = await sendJsonData(userInput);
+    String aiReply = await sendJsonData(combinedMessage);
     print("aiReply========="+aiReply);
     Map<String, dynamic>? result = extractPostJson(aiReply);
     final cleanedMessage = result?['message'];
     final jsonData = result?['json'];
     print(result.toString());
     try{
-      print(cleanedMessage+"========="+jsonData);
+      void printLongString(String text) {
+        const int chunkSize = 800;
+        for (var i = 0; i < text.length; i += chunkSize) {
+          print(text.substring(i, i + chunkSize > text.length ? text.length : i + chunkSize));
+        }
+      }
+
+      printLongString(cleanedMessage + "=========" + jsonData.toString());
+
     }
     catch(e)
     {
@@ -216,7 +575,7 @@ class _ChatBodyState extends State<ChatBody> {
           duration: Duration(seconds: 2),
         ),
       );
-      _tagUntaggedSendersInBackground();
+      _ONEtagUntaggedSendersInBackground();
 
     }
 
@@ -230,14 +589,16 @@ class _ChatBodyState extends State<ChatBody> {
     });
     _controller.clear();
   }
-  final bitch=null;
+  //final bitch=null;
 
   Future<String> sendJsonData(String userInput) async {
     // Your data as a Dart map
     Map<String, dynamic> data = {
       "From": "",
       "user_message": userInput,
-    "unique_session_id": "3c1d9ea7-3b5d-47f8-a79a-f6998a2bc92f",
+    "unique_session_id":
+    "a4ca0b45-bd81-4fed-9a11-a36e09151b7f"
+      ,
       "secret_key": "6d4617ad886cdea88b20f17d2238ef0d" //fb1d9464ec4c1764190725ab860e2a52            //6d4617ad886cdea88b20f17d2238ef0d
     };
 
@@ -260,6 +621,122 @@ class _ChatBodyState extends State<ChatBody> {
   }
 
   bool _isTyping = false;
+  String getWeekString(DateTime date) {
+    // Week number calculation based on ISO 8601
+    final firstDayOfYear = DateTime(date.year, 1, 1);
+    final daysOffset = firstDayOfYear.weekday - 1;
+    final firstMonday = firstDayOfYear.subtract(Duration(days: daysOffset));
+    final diff = date.difference(firstMonday).inDays;
+    final weekNumber = (diff / 7).ceil();
+    return "${date.year}-W$weekNumber";
+  }
+
+
+  Future<void> _attachAnalysisToInput() async {
+    String userInput = _controller.text.trim();
+    if (userInput.isEmpty) return; // Only proceed if input is not empty
+
+    final smsBox =  Hive.box<SmsModel>('smsBox');
+    final smsList = smsBox.values.toList();
+
+    Map<String, double> weeklyTotals = {};
+    Map<String, double> tagTotals = {};
+
+    for (var sms in smsList) {
+      if (sms.amount != null) {
+        final week = getWeekString(sms.receivedAt);
+        weeklyTotals[week] = (weeklyTotals[week] ?? 0) + sms.amount!;
+        if (sms.tag != null && sms.tag != 'Untagged') {
+          tagTotals[sms.tag!] = (tagTotals[sms.tag!] ?? 0) + sms.amount!;
+        }
+      }
+    }
+
+    StringBuffer analysis = StringBuffer();
+    analysis.writeln("!POST//Weekly Spend:");
+    weeklyTotals.forEach((week, total) => analysis.writeln("$week: ₹${total.toStringAsFixed(2)}"));
+    analysis.writeln("Tag Breakdown:");
+    tagTotals.forEach((tag, total) => analysis.writeln("$tag: ₹${total.toStringAsFixed(2)}"));
+    print("$userInput\n\n${analysis.toString()}");
+
+    // Append analysis to the input field (not sending)
+    _controller.text = "$userInput\n\n${analysis.toString()}";
+    // Optionally, move the cursor to the end
+    _controller.selection = TextSelection.fromPosition(
+      TextPosition(offset: _controller.text.length),
+    );
+  }
+
+  List<InlineSpan> parseMarkdownLines(String message) {
+    final lines = message.split('\n');
+    final spans = <InlineSpan>[];
+
+    final boldRegex = RegExp(r'\*\*(.*?)\*\*');
+
+    for (final line in lines) {
+      if (line.trim().startsWith('### ')  )  {
+        // Header line
+        spans.add(
+          TextSpan(
+            text: line.replaceFirst('### ', '') + '\n\n',
+            style: TextStyle(
+              fontWeight: FontWeight.w900, // Extra bold
+              fontSize: 20,
+              color: Color.fromRGBO(0, 212, 255, 1.0),
+            ),
+          ),
+        );
+      }
+      else if(line.trim().startsWith('## '))
+        {
+          spans.add(
+            TextSpan(
+              text: line.replaceFirst('## ', '') + '\n\n',
+              style: TextStyle(
+                fontWeight: FontWeight.w900, // Extra bold
+                fontSize: 20,
+                color: Color.fromRGBO(2, 255, 218, 1.0),
+              ),
+            ),
+          );
+
+        }
+      else {
+        // Normal line, parse for **bold**
+        int start = 0;
+        final innerSpans = <TextSpan>[];
+
+        for (final match in boldRegex.allMatches(line)) {
+          if (match.start > start) {
+            innerSpans.add(TextSpan(text: line.substring(start, match.start)));
+          }
+          innerSpans.add(TextSpan(
+            text: match.group(1),
+            style: TextStyle(fontWeight: FontWeight.w900, color: Color.fromRGBO(
+                125, 169, 179, 1.0),), // Extra bold
+          ));
+          start = match.end;
+        }
+        if (start < line.length) {
+          innerSpans.add(TextSpan(text: line.substring(start)));
+        }
+        // Add the line and a newline
+        spans.add(TextSpan(
+          children: innerSpans,
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 16,
+          ),
+        ));
+        spans.add(const TextSpan(text: '\n'));
+      }
+    }
+    return spans;
+  }
+
+
+
+
 
   @override
   Widget build(BuildContext context) {
@@ -274,7 +751,7 @@ class _ChatBodyState extends State<ChatBody> {
               final formattedTime =
                   TimeOfDay.fromDateTime(message.timestamp).format(context);
 
-              if (_isTyping && index == _messages.length - 1)
+              if (_isTyping && index == _messages.length - 1) {
                 return Column(
                   children: [
                     Container(
@@ -303,14 +780,13 @@ class _ChatBodyState extends State<ChatBody> {
                                     102, 115, 122, 1.0),width: 3,),
                               ),
                               padding: EdgeInsets.all(12),
-                              child: Text(
-                                message.text,
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 16,
+                              child: RichText(
+                                text: TextSpan(
+                                  children: parseMarkdownLines(message.text),
+                                  style: TextStyle(color: Colors.white, fontSize: 16),
                                 ),
-                                // duration: const Duration(milliseconds: 50),
                               ),
+
                             ),
                           ),
                           SizedBox(height: 4),
@@ -337,6 +813,7 @@ class _ChatBodyState extends State<ChatBody> {
 
                   ],
                 );
+              }
               return Container(
                 padding: EdgeInsets.symmetric(vertical: 8, horizontal: 16),
                 alignment: message.isUser
@@ -362,13 +839,11 @@ class _ChatBodyState extends State<ChatBody> {
                               102, 115, 122, 1.0),width: 3,),
                         ),
                         padding: EdgeInsets.all(12),
-                        child: Text(
-                          message.text,
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 16,
+                        child: RichText(
+                          text: TextSpan(
+                            children: parseMarkdownLines(message.text),
+                            style: TextStyle(color: Colors.white, fontSize: 16),
                           ),
-                          // duration: const Duration(milliseconds: 50),
                         ),
                       ),
                     ),
@@ -395,6 +870,41 @@ class _ChatBodyState extends State<ChatBody> {
               color: Color.fromRGBO(169, 234, 246, 1.0),
               child: Row(
                 children: [
+                  // DropdownButton<String>(
+                  //   value: selectedFilter,
+                  //   items: filterTypes.map((String value) {
+                  //     return DropdownMenuItem<String>(
+                  //       value: value,
+                  //       child: Text(value),
+                  //     );
+                  //   }).toList(),
+                  //   onChanged: (String? newValue) {
+                  //     setState(() {
+                  //       selectedFilter = newValue!;
+                  //       // Optionally update the UI to show the relevant picker
+                  //     });
+                  //   },
+                  // ),
+
+                  SizedBox(
+                    height: 48,
+                    width: 48,
+                    child: TextButton(
+                      onPressed: _showAnalysisModal,
+                      style: TextButton.styleFrom(
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        backgroundColor: Color(0xFF10B6C5),
+                      ),
+                      child: Icon(Icons.attach_file, color: Color.fromRGBO(38, 50, 56, 1.0)),
+                    )
+
+                  ),
+
+                  SizedBox(width: 8),
+
+
                   // Rounded TextField
                   Expanded(
                     child: TextField(
@@ -433,13 +943,10 @@ class _ChatBodyState extends State<ChatBody> {
                         elevation: 0,
                         padding: EdgeInsets.symmetric(horizontal: 24),
                       ),
-                      child: Text(
-                        'Send',
-                        style: TextStyle(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 16,
-                            color: Color.fromRGBO(255, 255, 255, 1.0)),
-                      ),
+                      child:Icon(
+                          Icons.send,
+                        color: Colors.white,
+                      )
                     ),
                   ),
                 ],

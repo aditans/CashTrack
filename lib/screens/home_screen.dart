@@ -45,9 +45,9 @@ class HomeScreen extends StatefulWidget {
 }
 
 class Home extends StatefulWidget {
-  final WebViewController controller;
+  //final WebViewController controller;
 
-  const Home({super.key, required this.controller});
+  const Home({super.key});
 
   @override
   State<Home> createState() => _HomeState();

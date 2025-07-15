@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:another_telephony/telephony.dart' as telephony;
@@ -32,8 +33,8 @@ final easySmsReceiver = easy.EasySmsReceiver.instance;
 Future<void> _backgroundSmsHandler(SmsMessage msg) async {
   await Hive.initFlutter();
   Hive.registerAdapter(SmsModelAdapter());
-  await Hive.openBox<String>('tagBox');
-  final smsBox = await Hive.openBox<SmsModel>('smsBox');
+  //await Hive.openBox<String>('tagBox');
+  final smsBox = Hive.box<SmsModel>('smsBox');
 
   final parsed = parseSms(msg.body ?? '');
 
@@ -67,6 +68,121 @@ Future<void> _backgroundSmsHandler(SmsMessage msg) async {
 
 }
 
+Future<Map<String, String>>  fetchTagForSender(List<String> senders) async {
+  try {
+
+    Map<String, dynamic> data = {
+      "From": "",
+      "secret_key":"83ff2da7b5278d22ab0f4998591c2989",
+      "unique_session_id":"27bdbd63-4cd1-4d83-afea-9b1d4d983cff", //"802d5f2a-6d54-40a5-932b-e98924b96e1c" "db60b026-8728-4408-9ec1-43a76e4c19a4" "b4a75ba6-12d3-4afa-bb28-45fce007ecb1"
+      "user_message":senders.toString(),
+    };
+    print(senders.toString());
+    String jsonBody = json.encode(data);
+
+    final response = await http.post(
+      Uri.parse('https://www.omnidim.io/chat/start_chat'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonBody,
+    );
+    if (response.statusCode == 200) {
+      final Map<String, dynamic> decoded = json.decode(response.body);
+      debugPrint('\n=======================================\n');
+      debugPrint('Tags: ${decoded['cycle_data']['content']}');
+      Map<String, dynamic>? tagSection;
+      if (decoded['cycle_data'] != null && decoded['cycle_data']['content'] != null) {
+        Map<String, dynamic> content = json.decode(decoded['cycle_data']?['content']);
+        if (content is Map<String, dynamic>) {
+          tagSection = content;
+        } else if (content is Map) {
+          tagSection = Map<String, dynamic>.from(content);
+        } else if (decoded['response'] != null) {
+          tagSection = decoded['response'];
+        }
+
+      } else if (decoded['response'] != null) {
+        tagSection = decoded['response'];
+      }
+      //debugPrint('Tags: ${decoded}');
+      if (tagSection != null) {
+        // Make sure tagSection is Map<String, dynamic>
+        return tagSection.map((k, v) => MapEntry(k, v.toString()));
+      }
+
+    }
+  } catch (e) {
+    debugPrint('Tag fetch failed for ${senders.toString()}: $e');
+  }
+  return {for (var s in senders) s: 'Untagged'};
+}
+Future<void> _tagUntaggedSendersInBackground() async {
+  print("Starting _tagUntaggedSendersInBackground...");
+  final smsBox =  Hive.box<SmsModel>('smsBox');
+  print("smsBox has ${smsBox.length} SMSs");
+  final tagBox = Hive.box<Map>('tagBox');
+
+  //Box<String> tagBox;
+  //final tagBox = await Hive.openBox<String>('tagBox');
+
+  // if (Hive.isBoxOpen('tagBox')) {
+  //   // tagBox = Hive.box<String>('tagBox');
+  // } else {
+  //   // tagBox = await Hive.openBox<String>('tagBox');
+  // }
+
+
+  final smsList = smsBox.values.toList();
+  final untaggedSenders = smsBox.values
+      .where((sms) => sms.tag == null || sms.tag == 'Untagged')
+      .map((sms) => sms.sender)
+      .toSet()
+      .toList();
+  print("smsBox has ${untaggedSenders} ${smsList}");
+  final Set<String> processedSenders = {};
+
+  for (var i = 0; i < untaggedSenders.length; i += 15) {
+    final batch = untaggedSenders.skip(i).take(15).toList();
+
+    final tagMap = await fetchTagForSender(batch);
+
+    // Update Hive with the new tags
+    for (final sender in batch) {
+      final tag = tagMap[sender] ?? 'Untagged';
+      tagBox.put(sender, {"tag":tag});
+      // Optionally, update the tag in each SMS as well
+      for (final sms in smsBox.values.where((sms) => sms.sender == sender)) {
+        smsBox.put(sms.key, sms.copyWith(tag: tag));
+      }
+    }
+    if (i + 15 < untaggedSenders.length) {
+      await Future.delayed(Duration(seconds: 30));
+    }
+  }
+}
+
+class TaggingService {
+  static final TaggingService _instance = TaggingService._internal();
+  factory TaggingService() => _instance;
+  TaggingService._internal();
+
+  Timer? _timer;
+
+  void start() {
+
+      _tagUntaggedSendersInBackground();
+
+  }
+
+
+  void stop() {
+    _timer?.cancel();
+    _timer = null;
+  }
+
+// ...add your tagging logic here...
+}
+
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
@@ -80,6 +196,7 @@ Future<void> main() async {
   Hive.registerAdapter(IndividualChatModelAdapter());
   Hive.registerAdapter(SplitModelAdapter());
   await Hive.openBox<SmsModel>('smsBox');
+  print("=================== sms box has ${Hive.box<SmsModel>('smsBox').length} ==================");
   await Hive.openBox<Map>('tagBox'); // For custom tags
   //final tagBox = Hive.box<String>('tagBox');
   // Notifications init
@@ -101,7 +218,7 @@ Future<void> main() async {
       Map<String, dynamic> data = {
         "From": "",
         "secret_key":"83ff2da7b5278d22ab0f4998591c2989",
-        "unique_session_id":"4b6bb5d9-4157-4d78-bee4-c799d47a770e", //"802d5f2a-6d54-40a5-932b-e98924b96e1c" "db60b026-8728-4408-9ec1-43a76e4c19a4" "b4a75ba6-12d3-4afa-bb28-45fce007ecb1"
+        "unique_session_id":"27bdbd63-4cd1-4d83-afea-9b1d4d983cff", //"802d5f2a-6d54-40a5-932b-e98924b96e1c" "db60b026-8728-4408-9ec1-43a76e4c19a4" "b4a75ba6-12d3-4afa-bb28-45fce007ecb1"
         "user_message":senders.toString(),
       };
       print(senders.toString());
@@ -142,9 +259,9 @@ Future<void> main() async {
     }
     return {for (var s in senders) s: 'Untagged'};
   }
-  Future<void> _tagUntaggedSendersInBackground() async {
+  Future<void> _ONEtagUntaggedSendersInBackground() async {
     print("Starting _tagUntaggedSendersInBackground...");
-    final smsBox = await Hive.openBox<SmsModel>('smsBox');
+    final smsBox = Hive.box<SmsModel>('smsBox');
     print("smsBox has ${smsBox.length} SMSs");
     final tagBox = Hive.box<Map>('tagBox');
 
@@ -214,7 +331,7 @@ Future<void> main() async {
           sms.body,
           NotificationDetails(android: androidDetails),
         );
-        _tagUntaggedSendersInBackground();
+        _ONEtagUntaggedSendersInBackground();
       },
     );
   }
@@ -222,7 +339,7 @@ Future<void> main() async {
 
 
 
-
+  //TaggingService().start();
   runApp(const MyApp());
 }
 

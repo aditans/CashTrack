@@ -32,33 +32,33 @@ class TransactionsBody extends StatefulWidget {
 }
 
 class _TransactionsBodyState extends State<TransactionsBody> {
-  late final WebViewController _controller;
-
-  final String htmlData = '''
-  <!DOCTYPE html>
-  <html>
-  <head>
-    <meta charset="UTF-8">
-    <style>
-      html, body {
-        background: transparent !important;
-        margin: 0;
-        padding: 0;
-      }
-      
-    </style>
-  </head>
-  <body>
-    <script id="omnidimension-web-widget" async
-      src="https://backend.omnidim.io/web_widget.js?secret_key=6d4617ad886cdea88b20f17d2238ef0d">
-    </script>
-    <script>
-      // Reinforce transparency after widget loads
-     
-    </script>
-  </body>
-  </html>
-''';
+//   late final WebViewController _controller;
+//
+//   final String htmlData = '''
+//   <!DOCTYPE html>
+//   <html>
+//   <head>
+//     <meta charset="UTF-8">
+//     <style>
+//       html, body {
+//         background: transparent !important;
+//         margin: 0;
+//         padding: 0;
+//       }
+//
+//     </style>
+//   </head>
+//   <body>
+//     <script id="omnidimension-web-widget" async
+//       src="https://backend.omnidim.io/web_widget.js?secret_key=6d4617ad886cdea88b20f17d2238ef0d">
+//     </script>
+//     <script>
+//       // Reinforce transparency after widget loads
+//
+//     </script>
+//   </body>
+//   </html>
+// ''';
 
 
 
@@ -68,31 +68,31 @@ class _TransactionsBodyState extends State<TransactionsBody> {
   @override
   void initState() {
     super.initState();
-    final smsBox = Hive.box<SmsModel>('smsBox');
+    //final smsBox = Hive.box<SmsModel>('smsBox');
 
 
 
 
-    _taggingTimer = Timer.periodic(const Duration(seconds: 60), (timer) {
-      _tagUntaggedSendersInBackground();
-    });
-    _controller = WebViewController()
-
-      ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setNavigationDelegate(NavigationDelegate(
-        onPageStarted: (url) => debugPrint("Page started: $url"),
-        onPageFinished: (url) => debugPrint("Page finished: $url"),
-      ))
-      ..loadRequest(Uri.dataFromString(
-        htmlData,
-        mimeType: 'text/html',
-        encoding: Encoding.getByName('utf-8'),
-      ));
+    // _taggingTimer = Timer.periodic(const Duration(minutes: 3), (timer) {
+       _tagUntaggedSendersInBackground();
+    // });
+    // _controller = WebViewController()
+    //
+    //   ..setJavaScriptMode(JavaScriptMode.unrestricted)
+    //   ..setNavigationDelegate(NavigationDelegate(
+    //     onPageStarted: (url) => debugPrint("Page started: $url"),
+    //     onPageFinished: (url) => debugPrint("Page finished: $url"),
+    //   ))
+    //   ..loadRequest(Uri.dataFromString(
+    //     htmlData,
+    //     mimeType: 'text/html',
+    //     encoding: Encoding.getByName('utf-8'),
+    //   ));
 
   }
   Future<void> _tagUntaggedSendersInBackground() async {
     print("Starting _tagUntaggedSendersInBackground...");
-    final smsBox = await Hive.openBox<SmsModel>('smsBox');
+    final smsBox =  Hive.box<SmsModel>('smsBox');
     print("smsBox has ${smsBox.length} SMSs");
     final tagBox = Hive.box<Map>('tagBox');
 
@@ -117,6 +117,7 @@ class _TransactionsBodyState extends State<TransactionsBody> {
 
     for (var i = 0; i < untaggedSenders.length; i += 15) {
       final batch = untaggedSenders.skip(i).take(15).toList();
+
       final tagMap = await fetchTagForSender(batch);
 
       // Update Hive with the new tags
@@ -128,8 +129,12 @@ class _TransactionsBodyState extends State<TransactionsBody> {
           smsBox.put(sms.key, sms.copyWith(tag: tag));
         }
       }
+      if (i + 15 < untaggedSenders.length) {
+        await Future.delayed(Duration(seconds: 30));
+      }
     }
   }
+
 
 
 
@@ -139,7 +144,7 @@ class _TransactionsBodyState extends State<TransactionsBody> {
       Map<String, dynamic> data = {
         "From": "",
         "secret_key":"83ff2da7b5278d22ab0f4998591c2989",
-        "unique_session_id":"4b6bb5d9-4157-4d78-bee4-c799d47a770e", //"802d5f2a-6d54-40a5-932b-e98924b96e1c" "db60b026-8728-4408-9ec1-43a76e4c19a4" "b4a75ba6-12d3-4afa-bb28-45fce007ecb1"
+        "unique_session_id":"27bdbd63-4cd1-4d83-afea-9b1d4d983cff", //"802d5f2a-6d54-40a5-932b-e98924b96e1c" "db60b026-8728-4408-9ec1-43a76e4c19a4" "b4a75ba6-12d3-4afa-bb28-45fce007ecb1"
         "user_message":senders.toString(),
       };
       print(senders.toString());
@@ -180,6 +185,12 @@ class _TransactionsBodyState extends State<TransactionsBody> {
     }
     return {for (var s in senders) s: 'Untagged'};
   }
+  @override
+  void dispose() {
+    _taggingTimer?.cancel();
+    super.dispose();
+  }
+
 
   bool isExpanded = false;
   @override
@@ -196,7 +207,7 @@ class _TransactionsBodyState extends State<TransactionsBody> {
     var width = 200.0;
     var height = 100.0;
     List<Widget> pages = [
-      Home(controller: _controller),
+      Home(),
       SkillUp(),
       ChatBody(),
       SplitsBody(),

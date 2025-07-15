@@ -31,26 +31,7 @@ class _LoadingTransactionsPageState extends State<LoadingTransactionsPage> {
     super.initState();
     _readInboxOnceWithProgress();
   }
-  Future<String> fetchTagForSender(String sender) async {
-    final response = await http.post(
-      Uri.parse('https://www.omnidim.io/chat/start_chat'),
-      headers: {'Content-Type': 'application/json'},
-      body: json.encode({
-        "From": "",
-        "user_message": "$sender:?",
-        "secret_key": "fb1d9464ec4c1764190725ab860e2a52"
-      }),
-    );
-    if (response.statusCode == 200) {
-      // Expecting a response like: "Redbus India Pr:travel"
-      final line = response.body.trim();
-      final parts = line.split(':');
-      if (parts.length == 2) {
-        return parts[1].trim();
-      }
-    }
-    return 'Untagged'; // Fallback if no tag is returned
-  }
+
 
 
   Future<void> _readInboxOnceWithProgress() async {
@@ -85,7 +66,7 @@ class _LoadingTransactionsPageState extends State<LoadingTransactionsPage> {
       final timestamp = msg.date ?? 0;
       final keySender = parsed['name'] ?? msg.address ?? 'Unknown';
       ////
-      //final tagx = await fetchTagForSender(keySender); //Untagged
+      //
       ////
       final exists = smsBox.values.any((s) =>
       s.sender == keySender &&
