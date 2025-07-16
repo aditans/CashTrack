@@ -374,9 +374,10 @@ class _SectionHeader extends StatelessWidget {
         Icon(icon, color: colorx, size: 32),
         const SizedBox(width: 8),
         Text(
+          overflow: TextOverflow.ellipsis,
           label,
           style: TextStyle(
-            fontSize: 26,
+            fontSize: 24,
             color: colorx,
             fontWeight: FontWeight.w600,
           ),
@@ -734,6 +735,7 @@ class SkillUp extends StatelessWidget {
               icon: Icons.directions_car,
               label: 'Smart Spending Habits',
               colorx:Colors.red
+
             ),
 
             GridView.count(

@@ -28,7 +28,7 @@ import 'screens/home_screen.dart';
 final _notifPlugin = FlutterLocalNotificationsPlugin();
 final easySmsReceiver = easy.EasySmsReceiver.instance;
 
-
+//background
 @pragma('vm:entry-point')
 Future<void> _backgroundSmsHandler(SmsMessage msg) async {
   await Hive.initFlutter();
@@ -299,7 +299,7 @@ Future<void> main() async {
       }
 
   }
-
+  //foreground
   final foregroundGranted = await requestSmsAndNotificationPermissions();
   if (foregroundGranted) {
     easySmsReceiver.listenIncomingSms(

@@ -60,7 +60,7 @@ class _TransactionsBodyState extends State<TransactionsBody> {
 //   </html>
 // ''';
 
-  Timer? _taggingTimer;
+
   User? user = global_user;
   @override
   void initState() {
@@ -155,14 +155,8 @@ class _TransactionsBodyState extends State<TransactionsBody> {
             decoded['cycle_data']['content'] != null) {
           Map<String, dynamic> content =
               json.decode(decoded['cycle_data']?['content']);
-          if (content is Map<String, dynamic>) {
-            tagSection = content;
-          } else if (content is Map) {
-            tagSection = Map<String, dynamic>.from(content);
-          } else if (decoded['response'] != null) {
-            tagSection = decoded['response'];
-          }
-        } else if (decoded['response'] != null) {
+          tagSection = content;
+                } else if (decoded['response'] != null) {
           tagSection = decoded['response'];
         }
         //debugPrint('Tags: ${decoded}');
@@ -179,7 +173,7 @@ class _TransactionsBodyState extends State<TransactionsBody> {
 
   @override
   void dispose() {
-    _taggingTimer?.cancel();
+
     super.dispose();
   }
 

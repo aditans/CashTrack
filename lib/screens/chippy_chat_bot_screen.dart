@@ -7,6 +7,7 @@ import 'package:typewritertext/typewritertext.dart';
 
 import '../models/sms_model.dart';
 
+String chippy = "7d5b7326-4776-47f2-abcf-296b00ef3bda";
 class ChatBody extends StatefulWidget {
   const ChatBody({Key? key}) : super(key: key);
 
@@ -62,7 +63,7 @@ class _ChatBodyState extends State<ChatBody> {
     final Set<String> processedSenders = {};
 
 
-    final batch = untaggedSenders.take(1).toList();
+    final batch = untaggedSenders.take(10).toList();
     final tagMap = await fetchTagForSender(batch);
 
     // Update Hive with the new tags
@@ -125,7 +126,7 @@ class _ChatBodyState extends State<ChatBody> {
 
   Future<void> _getInitialGreeting() async {
 
-    String aiReply = await sendJsonData("","6d4617ad886cdea88b20f17d2238ef0d","b2c968f7-a1c5-4267-99be-fc9c387dc0f1");
+    String aiReply = await sendJsonData("","6d4617ad886cdea88b20f17d2238ef0d",chippy);
     setState(() {
       _messages.add(ChatMessage(
         text: aiReply,
@@ -137,7 +138,9 @@ class _ChatBodyState extends State<ChatBody> {
 
   String? _pendingAnalysisSelection;
 
-
+  DateTime? startDate;
+  DateTime? endDate;
+  String? customDateDisplay;
 
 
 
@@ -223,25 +226,26 @@ class _ChatBodyState extends State<ChatBody> {
                     else if (selected == 'Custom') ...[
                       Text('Select Date Range'),
                       ElevatedButton(
-                        onPressed: () async {
-                          final picked = await showDateRangePicker(
-                            context: context,
-                            firstDate: DateTime(2000),
-                            lastDate: DateTime.now(),
-                            initialDateRange: DateTimeRange(
-                              start: DateTime.now().subtract(Duration(days: 6)),
-                              end: DateTime.now(),
-                            ),
-                          );
-                          if (picked != null) {
-                            setModalState(() => selectedMonth = "${picked.start.toIso8601String().substring(0, 10)} to ${picked.end.toIso8601String().substring(0, 10)}");
-                            // Store both start and end dates as needed
+                        onPressed: () async { final DateTimeRange? picked = await showDateRangePicker(
+                          context: context,
+                          firstDate: DateTime(2000),
+                          lastDate: DateTime.now(),
+                          initialDateRange: startDate != null && endDate != null
+                              ? DateTimeRange(start: startDate!, end: endDate!)
+                              : DateTimeRange(
+                            start: DateTime.now().subtract(const Duration(days: 6)),
+                            end: DateTime.now(),
+                          ),
+                        );
+                        if (picked != null) {
+                          setModalState(() {
                             startDate = picked.start;
                             endDate = picked.end;
-                          }
+                            customDateDisplay = "${picked.start.toIso8601String().substring(0, 10)} to ${picked.end.toIso8601String().substring(0, 10)}";
+                          });
+                        }
                         },
-                        child: Text(selectedMonth ?? 'Pick a date range'),
-                      ),
+                        child: Text(customDateDisplay ?? 'Pick a date range'),                      ),
                     ]
 
                     else if (selected == 'Yearly') ...[
@@ -286,22 +290,27 @@ class _ChatBodyState extends State<ChatBody> {
 
   Map<String, dynamic>? extractPostJson(String aiReply, {String marker = "!POST//"}) {
     if (aiReply.contains(marker)) {
+      final RegExp regExp = RegExp(r'\{([^}]*)\}');
       final parts = aiReply.split(marker);
       final cleanedMessage = parts[0].trim();
-      final jsonStr = parts[1].trim();
-      try {
-        final jsonData = json.decode(jsonStr);
-        return {
-          'message': cleanedMessage,
-          'json': jsonData,
-        };
-      } catch (e) {
-        // If JSON parsing fails, just return the original message
-        print("ERRRRRRRRRRRRRRRORRRRRRR ${e.toString()}");
-        return {
-          'message': aiReply,
-          'json': null,
-        };
+      final match = regExp.firstMatch(parts[1].trim());
+
+      if (match != null) {
+        // match.group(0): with braces, match.group(1): inside only
+        final jsonStr = '{${match.group(1)}}'; // Add braces back for valid JSON
+        try {
+          final jsonData = json.decode(jsonStr);
+          return {
+            'message': cleanedMessage,
+            'json': jsonData,
+          };
+        } catch (e) {
+          print("ERRRRRRR JSON DECODE ERROR: ${e.toString()}");
+          return {
+            'message': aiReply,
+            'json': null,
+          };
+        }
       }
     }
     return {
@@ -309,9 +318,12 @@ class _ChatBodyState extends State<ChatBody> {
       'json': null,
     };
   }
+
   Future<String> _generateAnalysis(String selection) async {
     final smsBox = Hive.box<SmsModel>('smsBox');
-    final smsList = smsBox.values.toList();
+
+
+    final smsList = smsBox.values.toList().where((sms) => sms.type == 'debit').toList();
     final months = [
       'January', 'February', 'March', 'April', 'May', 'June',
       'July', 'August', 'September', 'October', 'November', 'December'
@@ -831,7 +843,7 @@ class _ChatBodyState extends State<ChatBody> {
                               color: Colors.grey.shade400, width: 1.5),
                         ),
                       ),
-                      onSubmitted: (value) =>_pendingAnalysisSelection != null?_sendMessage("32510dc17e1a7d11120ca32bcf0339a5","bea0e018-077c-40c6-bbcc-9e64191e6d35") :_sendMessage("6d4617ad886cdea88b20f17d2238ef0d","b2c968f7-a1c5-4267-99be-fc9c387dc0f1"),
+                      onSubmitted: (value) =>_pendingAnalysisSelection != null?_sendMessage("32510dc17e1a7d11120ca32bcf0339a5","bea0e018-077c-40c6-bbcc-9e64191e6d35") :_sendMessage("6d4617ad886cdea88b20f17d2238ef0d",chippy),
                     ),
                   ),
                   SizedBox(width: 8),
@@ -839,7 +851,7 @@ class _ChatBodyState extends State<ChatBody> {
                   SizedBox(
                     height: 48,
                     child: ElevatedButton(
-                      onPressed: () => _pendingAnalysisSelection != null?_sendMessage("32510dc17e1a7d11120ca32bcf0339a5","bea0e018-077c-40c6-bbcc-9e64191e6d35") :_sendMessage("6d4617ad886cdea88b20f17d2238ef0d","b2c968f7-a1c5-4267-99be-fc9c387dc0f1"),
+                      onPressed: () => _pendingAnalysisSelection != null?_sendMessage("32510dc17e1a7d11120ca32bcf0339a5","bea0e018-077c-40c6-bbcc-9e64191e6d35") :_sendMessage("6d4617ad886cdea88b20f17d2238ef0d",chippy),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Color(0xFF10B6C5), // Teal blue
                         shape: RoundedRectangleBorder(
