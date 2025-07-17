@@ -1,30 +1,33 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
 class BalanceService {
-  static const _balanceKey = 'manual_balance';
-  static const _timestampKey = 'manual_balance_timestamp';
+  String _balanceKey(DateTime date) =>
+      'manual_balance_${date.year}_${date.month}';
 
-  Future<void> setManualBalance(double value) async {
+  String _timestampKey(DateTime date) =>
+      'manual_balance_timestamp_${date.year}_${date.month}';
+
+  Future<void> setManualBalance(DateTime date,double value) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setDouble(_balanceKey, value);
-    await prefs.setInt(_timestampKey, DateTime.now().millisecondsSinceEpoch);
+    await prefs.setDouble(_balanceKey(date), value);
+    await prefs.setInt(_timestampKey(date), DateTime.now().millisecondsSinceEpoch);
   }
 
-  Future<double?> getManualBalance() async {
+  Future<double?> getManualBalance(DateTime date) async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getDouble(_balanceKey);
+    return prefs.getDouble(_balanceKey(date));
   }
 
-  Future<DateTime?> getManualBalanceTimestamp() async {
+  Future<DateTime?> getManualBalanceTimestamp(DateTime date) async {
     final prefs = await SharedPreferences.getInstance();
-    final millis = prefs.getInt(_timestampKey);
+    final millis = prefs.getInt(_timestampKey(date));
     if (millis == null) return null;
     return DateTime.fromMillisecondsSinceEpoch(millis);
   }
 
-  Future<void> clearManualBalance() async {
+  Future<void> clearManualBalance(DateTime date) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_balanceKey);
-    await prefs.remove(_timestampKey);
+    await prefs.remove(_balanceKey(date));
+    await prefs.remove(_timestampKey(date));
   }
 }

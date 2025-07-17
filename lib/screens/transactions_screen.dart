@@ -84,6 +84,11 @@ class _TransactionsBodyState extends State<TransactionsBody> {
     //     encoding: Encoding.getByName('utf-8'),
     //   ));
   }
+  ////////total balance shit
+
+
+
+
 
   Future<void> _tagUntaggedSendersInBackground() async {
     print("Starting _tagUntaggedSendersInBackground...");

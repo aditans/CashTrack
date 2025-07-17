@@ -1,4 +1,7 @@
 import 'dart:async';
+import 'package:flutter/material.dart';
+import 'package:month_year_dropdown/month_year.dart';
+import 'package:intl/intl.dart';
 
 import 'package:another_telephony/telephony.dart' as telephony;
 import 'package:cashtrack/screens/omni_model_screen.dart';
@@ -19,6 +22,7 @@ import 'package:webview_flutter/webview_flutter.dart';
 import '../models/sms_model.dart';
 import '../services/balance_service.dart';
 import '../services/sms_parser.dart';
+import 'SetLimitModal.dart';
 import 'expense_analysis_page.dart';
 import 'manual_expense_page.dart';
 
@@ -81,10 +85,13 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
     //_readInboxOnce();
     _loadSmsIncrementally();
     _loadManualBalance();
+    _loadMonthlyLimit();
+    _setLimitFromHive();
   }
+
   Future<void> _loadManualBalance() async {
-    final balance = await _balanceService.getManualBalance();
-    final timestamp = await _balanceService.getManualBalanceTimestamp();
+    final balance = await _balanceService.getManualBalance(_selectedDate);
+    final timestamp = await _balanceService.getManualBalanceTimestamp(_selectedDate);
     setState(() {
       _manualBalance = balance;
       _manualTimestamp = timestamp;
@@ -105,6 +112,9 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
       _debounceIncrementalSmsLoad();
     }
   }
+
+  double totalIncome = 0;
+  double totalExpense = 0;
 
   void _debounceIncrementalSmsLoad() {
     _smsLoaderDebounce?.cancel();
@@ -180,6 +190,202 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
     }
   }
 
+  int _getMonthNumber(String monthName) {
+    final months = [
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December'
+    ];
+    return months.indexOf(monthName) + 1;
+  }
+
+  double? _monthlyLimit;
+  String woahMsg = "";
+  Future<void> _loadMonthlyLimit() async {
+   // _monthlyLimit=_currentLimit as double?;
+    final box = await Hive.openBox('settingsBox');
+    String limitKey = 'limit_${_selectedDate.year}_${_selectedDate.month}';
+    final limit = box.get(limitKey);
+    setState(() {
+      _monthlyLimit = (limit is num) ? limit.toDouble() : null;
+    });
+    final totals = _calculateMonthlyTotals(); // {income, expense, balance}
+    final expense = totals['expense'] ?? 0.0;
+    // for (final transaction in filteredTransactions) {
+    //   if (transaction.type == 'debit') {
+    //     sumExpenses += transaction.amount ?? 0;
+    //   }
+    // }
+
+    if (_monthlyLimit != null && expense > _monthlyLimit!) {
+      woahMsg = 'Woah, slow down! You have spent\n'
+          '${((expense / _monthlyLimit!) * 100).toStringAsFixed(1)}% of your monthly limit this month.';
+    } else if (_monthlyLimit != null && _monthlyLimit! > 0) {
+      woahMsg = 'You have spent\n'
+          '${((expense / _monthlyLimit!) * 100).toStringAsFixed(1)}% of your monthly limit this month.';
+    } else {
+      woahMsg = 'Set a monthly spending limit to keep track of your expenses!';
+    }
+  }
+  //var limit="not set";
+  late String _limitKey;
+
+  Future<String?> _loadExistingLimit() async {
+    final box = await Hive.openBox('settingsBox');
+    String limit = box.get(_limitKey).toString();
+    if(limit==null)limit="not set";
+    return limit;
+  }
+  String _currentLimit = "not set";
+
+  void _setLimitFromHive() async {
+    _limitKey =
+    'limit_${_selectedDate.year}_${_selectedDate.month}';
+    _currentLimit = "not set";
+    final box = await Hive.openBox('settingsBox');
+    var value = box.get(_limitKey);
+    setState(() {
+      _currentLimit = value?.toString() ?? "not set";
+    });
+  }
+
+  Widget _buildMonthYearSelector() {
+    return Container(
+      padding: const EdgeInsets.all(5.0),
+      decoration: BoxDecoration(
+        color: Color.fromRGBO(40, 216, 189, 0.4235294117647059),
+        borderRadius:
+            BorderRadius.vertical(top: Radius.zero, bottom: Radius.circular(9)),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.start,
+        children: [
+          const Text(
+            'Period:',
+            style: TextStyle(
+              color: Colors.white70,
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          SizedBox(
+            width: 7,
+          ),
+          Row(
+            children: [
+              // Month Dropdown
+              Container(
+                height: MediaQuery.of(context).size.width / 14,
+                padding: const EdgeInsets.symmetric(horizontal: 7),
+                decoration: BoxDecoration(
+                  color: Colors.grey[800],
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.grey[600]!),
+                ),
+                child: DropdownButton<int>(
+                  value: _selectedDate.month,
+                  dropdownColor: Colors.grey[800],
+                  underline: Container(),
+                  style: const TextStyle(color: Colors.white, fontSize: 12),
+                  items: List.generate(12, (index) {
+                    final month = DateTime(2024, index + 1);
+                    return DropdownMenuItem<int>(
+                      value: index + 1,
+                      child: Text(
+                        DateFormat('MMM').format(month),
+                        style: const TextStyle(color: Colors.white),
+                      ),
+                    );
+                  }),
+                  onChanged: (value) {
+                    if (value != null) {
+                      setState(() {
+                        _selectedDate = DateTime(_selectedDate.year, value, 1);
+                        _setLimitFromHive();
+                        _loadMonthlyLimit();
+                      });
+                    }
+                  },
+                ),
+              ),
+              const SizedBox(width: 8),
+              // Year Dropdown
+              Container(
+                height: MediaQuery.of(context).size.width / 14,
+                padding: const EdgeInsets.symmetric(horizontal: 7),
+                decoration: BoxDecoration(
+                  color: Colors.grey[800],
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.grey[600]!),
+                ),
+                child: DropdownButton<int>(
+                  value: _selectedDate.year,
+                  dropdownColor: Colors.grey[800],
+                  underline: Container(),
+                  style: const TextStyle(color: Colors.white, fontSize: 12),
+                  items: List.generate(10, (index) {
+                    final year = DateTime.now().year - 5 + index;
+                    return DropdownMenuItem<int>(
+                      value: year,
+                      child: Text(
+                        year.toString(),
+                        style: const TextStyle(color: Colors.white),
+                      ),
+                    );
+                  }),
+                  onChanged: (value) {
+                    if (value != null) {
+                      setState(() {
+                        _selectedDate = DateTime(value, _selectedDate.month, 1);
+                        _setLimitFromHive();
+                        _loadMonthlyLimit();
+                      });
+                    }
+                  },
+                ),
+              ),
+            ],
+          ),
+          SizedBox(width: MediaQuery.of(context).size.width / 24),
+          Text(
+            'Limit: ',
+            style: const TextStyle(
+              color: Colors.white70,
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          Container(
+            //height: MediaQuery.of(context).size.width/14,
+            padding: const EdgeInsets.all(3),
+            decoration: BoxDecoration(
+              color: Colors.grey[800],
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.grey[600]!),
+            ),
+            child: Text(
+              _currentLimit,
+              style: const TextStyle(
+                color: Colors.white70,
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          )
+        ],
+      ),
+    );
+  }
+
   Future<void> _readInboxOnce() async {
     final permissionGranted =
         await telephonyInstance.requestPhoneAndSmsPermissions;
@@ -236,6 +442,44 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
     }
   }
 
+  final TextEditingController _monthController = TextEditingController();
+  final TextEditingController _yearController = TextEditingController();
+  DateTime _selectedDate = DateTime.now();
+  List<SmsModel> _getFilteredTransactions() {
+    final smsBox = Hive.box<SmsModel>('smsBox');
+    final transactions = smsBox.values
+        .where((msg) => msg.type == 'credit' || msg.type == 'debit')
+        .toList();
+
+    return transactions.where((transaction) {
+      return transaction.receivedAt.year == _selectedDate.year &&
+          transaction.receivedAt.month == _selectedDate.month;
+    }).toList();
+  }
+
+  Map<String, double> _calculateMonthlyTotals() {
+    final filteredTransactions = _getFilteredTransactions();
+    double totalIncome = 0;
+    double totalExpense = 0;
+
+    for (final transaction in filteredTransactions) {
+      final amount = transaction.amount ?? 0;
+      if (transaction.type == 'credit') {
+        totalIncome += amount;
+      } else if (transaction.type == 'debit') {
+        totalExpense += amount;
+      }
+    }
+
+    return {
+      'income': totalIncome,
+      'expense': totalExpense,
+      'balance': totalIncome - totalExpense,
+    };
+  }
+   // Already fetched for _selectedDate
+
+
   @override
   Widget build(BuildContext context) {
     final Color robinsEggBlue = Color(0xFF00CCE7);
@@ -248,12 +492,12 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
             valueListenable: Hive.box<SmsModel>('smsBox').listenable(),
             builder: (context, Box<SmsModel> box, _) {
               // Compute dynamic totals on every change!
+              totalIncome = 0;
+              totalExpense = 0;
               final transactions = box.values
                   .where((msg) => msg.type == 'credit' || msg.type == 'debit')
                   .toList();
 
-              double totalIncome = 0;
-              double totalExpense = 0;
               for (final sms in transactions) {
                 final amt = sms.amount ?? 0;
                 if (sms.type == 'credit') {
@@ -261,7 +505,8 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                 } else if (sms.type == 'debit') {
                   totalExpense += amt;
                 }
-              }final defaultBalance = totalIncome - totalExpense;
+              }
+              final defaultBalance = totalIncome - totalExpense;
               double totalBalance;
               if (_manualBalance != null && _manualTimestamp != null) {
                 double deltaCredit = 0, deltaDebit = 0;
@@ -279,17 +524,19 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                 totalBalance = totalIncome - totalExpense;
               }
 
+              final filteredTransactions = _getFilteredTransactions();
+              final totals = _calculateMonthlyTotals();
               // Recent transactions
               final messages = transactions
                 ..sort((a, b) => b.receivedAt.compareTo(a.receivedAt));
               final latest = messages.take(5).toList();
               final tagBox =
                   Hive.isBoxOpen('tagBox') ? Hive.box<Map>('tagBox') : null;
-
+              double width = MediaQuery.of(context).size.width;
               return Stack(
                 children: [
                   SingleChildScrollView(
-                    padding: const EdgeInsets.all(10),
+                    padding: const EdgeInsets.all(7),
                     child: Column(
                       children: [
                         // Account Summary Card
@@ -297,7 +544,8 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                           aspectRatio: 497 / 293,
                           child: Container(
                             width: double.infinity,
-                            padding: const EdgeInsets.all(25),
+                            padding: EdgeInsets.fromLTRB(
+                                width / 17, 0, width / 17, 0),
                             decoration: BoxDecoration(
                               image: DecorationImage(
                                 image: AssetImage('assets/home_card.png'),
@@ -309,19 +557,33 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                                 Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
+                                    _buildMonthYearSelector(),
+                                    SizedBox(
+                                      height: width / 57,
+                                    ),
+
                                     const Text('Total Balance',
                                         style:
                                             TextStyle(color: Colors.white70)),
-                                    const SizedBox(height: 4),
+                                    //SizedBox(height: width/1187),
+
                                     Text(
-                                      "₹${totalBalance.toStringAsFixed(2)}",
-                                      style: const TextStyle(
-                                        fontSize: 24,
+                                      filteredTransactions.isEmpty
+                                          ? 'No data found'
+                                          : _manualBalance != null
+                                      // Manual balance set for this month/year: show it
+                                          ? "₹${_manualBalance?.toStringAsFixed(2)}"
+                                      // No manual balance: fallback to auto-calculated total
+                                          : "₹${totals['balance']!.toStringAsFixed(2)}",
+                                      style: TextStyle(
+                                        fontSize: width / 17,
                                         fontWeight: FontWeight.bold,
                                         color: Colors.white,
                                       ),
                                     ),
-                                    const SizedBox(height: 12),
+                                    SizedBox(
+                                      height: width / 57,
+                                    ),
                                     Row(
                                       mainAxisAlignment:
                                           MainAxisAlignment.start,
@@ -339,7 +601,9 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                                                           FontWeight.bold,
                                                       fontSize: 13)),
                                               Text(
-                                                  '₹${totalIncome.toStringAsFixed(2)}',
+                                                  filteredTransactions.isEmpty
+                                                      ? 'No data found'
+                                                      : "₹${totals['income']!.toStringAsFixed(2)}",
                                                   style: const TextStyle(
                                                       overflow:
                                                           TextOverflow.ellipsis,
@@ -361,7 +625,9 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                                                     fontWeight: FontWeight.bold,
                                                     fontSize: 13)),
                                             Text(
-                                                '₹${totalExpense.toStringAsFixed(2)}',
+                                                filteredTransactions.isEmpty
+                                                    ? 'No data found'
+                                                    : "₹${totals['expense']!.toStringAsFixed(2)}",
                                                 style: const TextStyle(
                                                     overflow:
                                                         TextOverflow.ellipsis,
@@ -372,44 +638,148 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                                         ),
                                       ],
                                     ),
-                                    const SizedBox(height: 16),
+                                    SizedBox(
+                                      height: width / 40,
+                                    ),
                                     Row(children: [
                                       Icon(Icons.account_balance,
+                                          size: width / 20,
                                           color: Colors.white),
                                       SizedBox(width: 8),
                                       Icon(Icons.credit_card,
+                                          size: width / 20,
                                           color: Colors.white),
                                       SizedBox(width: 18),
-                                      ElevatedButton.icon(
-                                        style: ElevatedButton.styleFrom(backgroundColor: Colors.white24),
-                                        icon: const Icon(Icons.edit, color: Colors.white),
-                                        label: const Text('Set Balance', style: TextStyle(color: Colors.white)),
-                                        onPressed: () async {
-                                          final result = await showModalBottomSheet(
-                                            context: context,
-                                            isScrollControlled: true,
-                                            useSafeArea: true,
-                                            shape: const RoundedRectangleBorder(
-                                                borderRadius: BorderRadius.vertical(top: Radius.circular(24))
+                                      Row(
+                                        children: [
+                                          // Set Balance
+                                          GestureDetector(
+                                            onTap: () async {
+                                              final result =
+                                                  await showModalBottomSheet(
+                                                context: context,
+                                                isScrollControlled: true,
+                                                useSafeArea: true,
+                                                shape:
+                                                    const RoundedRectangleBorder(
+                                                  borderRadius:
+                                                      BorderRadius.vertical(
+                                                          top: Radius.circular(
+                                                              24)),
+                                                ),
+                                                builder: (_) =>
+                                                     SetBalanceModal(selectedDate: _selectedDate,),
+                                              );
+                                              if (result == true)
+                                                _loadManualBalance();
+                                            },
+                                            child: Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                      vertical: 6,
+                                                      horizontal: 6),
+                                              decoration: BoxDecoration(
+                                                color: Colors.white24,
+                                                borderRadius:
+                                                    BorderRadius.circular(8),
+                                                border: Border.all(
+                                                    color: Colors.white38,
+                                                    width: 1),
+                                              ),
+                                              child: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Icon(Icons.edit,
+                                                      color: Colors.white,
+                                                      size: width / 30),
+                                                  SizedBox(width: width / 50),
+                                                  Text(
+                                                    'Set Balance',
+                                                    style: TextStyle(
+                                                        color: Colors.white,
+                                                        fontSize: width / 40,
+                                                        fontWeight:
+                                                            FontWeight.w500),
+                                                  ),
+                                                ],
+                                              ),
                                             ),
-                                            builder: (_) => const SetBalanceModal(),
-                                          );
-                                          if (result == true) _loadManualBalance();
-                                        },
-                                      ),
+                                          ),
 
-                                      Spacer(),
-                                      Icon(Icons.more_horiz,
-                                          color: Colors.white),
+                                          SizedBox(
+                                              width: width /
+                                                  40), // spacing between the two buttons
+
+                                          // Set Monthly Limit
+                                          GestureDetector(
+                                            onTap: () async {
+                                              final result =
+                                                  await showModalBottomSheet(
+                                                context: context,
+                                                isScrollControlled: true,
+                                                useSafeArea: true,
+                                                shape:
+                                                    const RoundedRectangleBorder(
+                                                  borderRadius:
+                                                      BorderRadius.vertical(
+                                                          top: Radius.circular(
+                                                              24)),
+                                                ),
+                                                builder: (_) =>
+                                                     SetLimitModal(selectedDate: _selectedDate),
+                                              );
+                                              // Optionally load new limit if set
+                                              if (result == true)
+                                                {
+                                                  _loadMonthlyLimit();
+                                                  _setLimitFromHive();
+                                                }
+
+                                            },
+                                            child: Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                      vertical: 6,
+                                                      horizontal: 6),
+                                              decoration: BoxDecoration(
+                                                color: Colors.white24,
+                                                borderRadius:
+                                                    BorderRadius.circular(8),
+                                                border: Border.all(
+                                                    color: Colors.white38,
+                                                    width: 1),
+                                              ),
+                                              child: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Icon(
+                                                      Icons
+                                                          .edit_calendar_outlined,
+                                                      color: Colors.white,
+                                                      size: width / 30),
+                                                  SizedBox(width: width / 50),
+                                                  Text(
+                                                    'Set Monthly limit',
+                                                    style: TextStyle(
+                                                        color: Colors.white,
+                                                        fontSize: width / 40,
+                                                        fontWeight:
+                                                            FontWeight.w500),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      )
                                     ]),
                                   ],
                                 ),
                                 Positioned(
                                   right: 1,
-                                  bottom: 50,
-                                  width: MediaQuery.of(context).size.width/3,
+                                  top: width / 10,
+                                  width: MediaQuery.of(context).size.width / 3,
                                   child: Column(
-
                                     children: [
                                       Container(
                                         padding: const EdgeInsets.all(8),
@@ -419,16 +789,15 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                                               BorderRadius.circular(10),
                                         ),
                                         child: Text(
-                                          'Woah, slow down! You have spent\n${(totalIncome + totalExpense) > 0 ? ((totalExpense / (totalIncome + totalExpense)) * 100).toStringAsFixed(1) : "0"}% more than your limit this month.',
+                                          woahMsg,
                                           style: TextStyle(
-                                            fontSize: 10,
+                                            fontSize: width / 50,
                                             color: shipGray,
                                             fontStyle: FontStyle.italic,
                                             fontWeight: FontWeight.w500,
                                           ),
                                         ),
                                       ),
-                                      const SizedBox(height: 8),
                                       SizedBox(
                                         width: 50,
                                         height: 50,
@@ -608,6 +977,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _readInboxOnce();
+
   }
 
   @override

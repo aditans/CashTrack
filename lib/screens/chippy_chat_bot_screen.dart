@@ -7,7 +7,7 @@ import 'package:typewritertext/typewritertext.dart';
 
 import '../models/sms_model.dart';
 
-String chippy = "7d5b7326-4776-47f2-abcf-296b00ef3bda";
+String chippy = "27f006a4-8dac-475f-89f7-b95dcb2a6c31";
 class ChatBody extends StatefulWidget {
   const ChatBody({Key? key}) : super(key: key);
 
@@ -843,7 +843,7 @@ class _ChatBodyState extends State<ChatBody> {
                               color: Colors.grey.shade400, width: 1.5),
                         ),
                       ),
-                      onSubmitted: (value) =>_pendingAnalysisSelection != null?_sendMessage("32510dc17e1a7d11120ca32bcf0339a5","bea0e018-077c-40c6-bbcc-9e64191e6d35") :_sendMessage("6d4617ad886cdea88b20f17d2238ef0d",chippy),
+                      onSubmitted: (value) =>_pendingAnalysisSelection != null?_sendMessage("32510dc17e1a7d11120ca32bcf0339a5","bbdf34ee-8528-4989-8fc8-cfc27a930549") :_sendMessage("6d4617ad886cdea88b20f17d2238ef0d",chippy),
                     ),
                   ),
                   SizedBox(width: 8),
@@ -851,7 +851,7 @@ class _ChatBodyState extends State<ChatBody> {
                   SizedBox(
                     height: 48,
                     child: ElevatedButton(
-                      onPressed: () => _pendingAnalysisSelection != null?_sendMessage("32510dc17e1a7d11120ca32bcf0339a5","bea0e018-077c-40c6-bbcc-9e64191e6d35") :_sendMessage("6d4617ad886cdea88b20f17d2238ef0d",chippy),
+                      onPressed: () => _pendingAnalysisSelection != null?_sendMessage("32510dc17e1a7d11120ca32bcf0339a5","bbdf34ee-8528-4989-8fc8-cfc27a930549") :_sendMessage("6d4617ad886cdea88b20f17d2238ef0d",chippy),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Color(0xFF10B6C5), // Teal blue
                         shape: RoundedRectangleBorder(
