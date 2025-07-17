@@ -215,26 +215,33 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
     final box = await Hive.openBox('settingsBox');
     String limitKey = 'limit_${_selectedDate.year}_${_selectedDate.month}';
     final limit = box.get(limitKey);
-    setState(() {
-      _monthlyLimit = (limit is num) ? limit.toDouble() : null;
-    });
     final totals = _calculateMonthlyTotals(); // {income, expense, balance}
     final expense = totals['expense'] ?? 0.0;
+    setState(() {
+      _monthlyLimit = (limit is num) ? limit.toDouble() : null;
+      if (_monthlyLimit != null && _monthlyLimit! > 0) {
+        double times = expense / _monthlyLimit!;
+        String timesText = times.toStringAsFixed(1);
+
+        if (expense > _monthlyLimit!) {
+          woahMsg = 'Woah, slow down! You have spent\n'
+              '${timesText}x your monthly limit this month.';
+        } else {
+          woahMsg = 'You have spent\n'
+              '${timesText}x your monthly limit this month.';
+        }
+      } else {
+        woahMsg = 'Set a monthly spending limit to keep track of your expenses!';
+      }
+    });
+
     // for (final transaction in filteredTransactions) {
     //   if (transaction.type == 'debit') {
     //     sumExpenses += transaction.amount ?? 0;
     //   }
     // }
 
-    if (_monthlyLimit != null && expense > _monthlyLimit!) {
-      woahMsg = 'Woah, slow down! You have spent\n'
-          '${((expense / _monthlyLimit!) * 100).toStringAsFixed(1)}% of your monthly limit this month.';
-    } else if (_monthlyLimit != null && _monthlyLimit! > 0) {
-      woahMsg = 'You have spent\n'
-          '${((expense / _monthlyLimit!) * 100).toStringAsFixed(1)}% of your monthly limit this month.';
-    } else {
-      woahMsg = 'Set a monthly spending limit to keep track of your expenses!';
-    }
+
   }
   //var limit="not set";
   late String _limitKey;
