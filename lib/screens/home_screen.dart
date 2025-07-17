@@ -42,7 +42,8 @@ const tagIconMap = {
   'education': Icons.school,
   'fuel': Icons.local_gas_station,
   'fitness': Icons.fitness_center,
-  'clothing': Icons.shopping_bag,
+
+
 };
 
 class HomeScreen extends StatefulWidget {
@@ -910,8 +911,8 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
 
                                         // Tag logic: custom tag icon or default
                                         IconData tagIconData =
-                                            Icons.label_outline;
-                                        if (tagBox != null && sms.tag != null) {
+                                            Icons.label_off;
+                                        if (tagBox != null && sms.tag != null ) {
                                           final customTagIconCode = tagBox
                                               .get('customTags')?[sms.tag];
                                           if (customTagIconCode != null) {
@@ -921,12 +922,12 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                                           } else {
                                             tagIconData = tagIconMap[
                                                     sms.tag?.toLowerCase()] ??
-                                                Icons.label_outline;
+                                                Icons.label_off;
                                           }
                                         } else {
                                           tagIconData = tagIconMap[
                                                   sms.tag?.toLowerCase()] ??
-                                              Icons.label_outline;
+                                              Icons.label_off;
                                         }
                                         final tagLabel = sms.tag ?? 'Untagged';
 
@@ -948,6 +949,8 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                                             isCredit: isCredit,
                                             time: time,
                                             tagIcon: tagIconData,
+                                            bank: sms.bank ?? 'N/A',
+
                                           ),
                                         );
                                       },
@@ -1146,6 +1149,7 @@ class _TransactionTile extends StatelessWidget {
   final String time;
   final IconData tagIcon;
   final bool isSplit;
+  final String bank;
 
   const _TransactionTile({
     required this.name,
@@ -1155,6 +1159,7 @@ class _TransactionTile extends StatelessWidget {
     required this.time,
     required this.tagIcon,
     this.isSplit = false,
+    required this.bank ,
     super.key,
   });
 
@@ -1181,6 +1186,8 @@ class _TransactionTile extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+            //     Text(bank ,style: const TextStyle(
+            // color: Colors.white, fontWeight: FontWeight.bold),),
                 Text(
                   isCredit ? 'Received from $name' : 'Paid to $name',
                   style: const TextStyle(
@@ -1196,6 +1203,7 @@ class _TransactionTile extends StatelessWidget {
             ),
           ),
           if (isSplit) Icon(Icons.call_split, color: Colors.orange, size: 16),
+
           const SizedBox(width: 8),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),

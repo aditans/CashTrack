@@ -23,13 +23,14 @@ class SmsModelAdapter extends TypeAdapter<SmsModel> {
       amount: fields[3] as double?,
       type: fields[4] as String?,
       tag: fields[5] as String?,
+      bank: fields[6] as String?,
     );
   }
 
   @override
   void write(BinaryWriter writer, SmsModel obj) {
     writer
-      ..writeByte(6)
+      ..writeByte(7)
       ..writeByte(0)
       ..write(obj.sender)
       ..writeByte(1)
@@ -41,7 +42,9 @@ class SmsModelAdapter extends TypeAdapter<SmsModel> {
       ..writeByte(4)
       ..write(obj.type)
       ..writeByte(5)
-      ..write(obj.tag);
+      ..write(obj.tag)
+      ..writeByte(6)
+      ..write(obj.bank);
   }
 
   @override

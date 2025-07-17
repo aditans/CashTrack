@@ -2,6 +2,7 @@ Map<String, dynamic> parseSms(String body) {
   double? amount;
   String? type;
   String? name;
+  String bank = 'N/A';
   String lower = body.toLowerCase();
 
   // SBI-specific: If 'sbi' or 'Refno' in message, try to match amount after 'debited by'
@@ -34,19 +35,20 @@ Map<String, dynamic> parseSms(String body) {
   // Extract counterparty name (same as before)
   if (type != null) {
     final hdfcTo = RegExp(r'To\s+([A-Z\s]+)\s+On', caseSensitive: false).firstMatch(body);
-    if (hdfcTo != null) name = hdfcTo.group(1)?.trim();
+    if (hdfcTo != null)
+      {name = hdfcTo.group(1)?.trim();bank='HDFC';}
 
     final iciciFrom = RegExp(r'from\s+([A-Z\s]+)\.?\s+UPI', caseSensitive: false).firstMatch(body);
-    if (iciciFrom != null) name = iciciFrom.group(1)?.trim();
+    if (iciciFrom != null) {name = iciciFrom.group(1)?.trim();bank='ICICI';}
 
     final iciciTo = RegExp(r';\s+([A-Z][A-Z\s]{3,})\s+(credited|debited)', caseSensitive: false).firstMatch(body);
-    if (iciciTo != null) name = iciciTo.group(1)?.trim();
+    if (iciciTo != null) {name = iciciTo.group(1)?.trim();bank='ICICI';}
 
     final sbiTo = RegExp(r'trf to\s+([A-Z\s]+)\s+Ref', caseSensitive: false).firstMatch(body);
-    if (sbiTo != null) name = sbiTo.group(1)?.trim();
+    if (sbiTo != null) {name = sbiTo.group(1)?.trim();bank='SBI';}
 
     final hdfcFromVPA = RegExp(r'from VPA\s+(.+?)\s+\(UPI', caseSensitive: false).firstMatch(body);
-    if (hdfcFromVPA != null) name = hdfcFromVPA.group(1)?.trim();
+    if (hdfcFromVPA != null){ name = hdfcFromVPA.group(1)?.trim();bank='HDFC';}
 
     if (name == null) {
       final fallback = RegExp(
@@ -61,5 +63,6 @@ Map<String, dynamic> parseSms(String body) {
     'amount': amount,
     'type': type,
     'name': name ?? 'Unknown',
+    'bank': bank,
   };
 }

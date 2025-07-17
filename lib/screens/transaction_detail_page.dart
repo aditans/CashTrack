@@ -20,7 +20,8 @@ const tagIconMap = {
   'education': Icons.school,
   'fuel': Icons.local_gas_station,
   'fitness': Icons.fitness_center,
-  'clothing': Icons.shopping_bag,
+
+  'Untagged': Icons.label_off
 
 
 };
@@ -46,7 +47,8 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
     'education',
     'fuel',
     'fitness',
-    'clothing'
+
+    'Untagged'
   ];
 
   List<String> get allTags =>

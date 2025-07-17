@@ -22,6 +22,9 @@ class SmsModel extends HiveObject {
   @HiveField(5)
   String? tag;
 
+  @HiveField(6)
+  String? bank;
+
   SmsModel({
     required this.sender,
     required this.body,
@@ -29,6 +32,7 @@ class SmsModel extends HiveObject {
     this.amount,
     this.type,
     this.tag,
+    this.bank,
   });
 
   SmsModel copyWith({
@@ -38,6 +42,7 @@ class SmsModel extends HiveObject {
     double? amount,
     String? type,
     String? tag,
+    String? bank,
   }) {
     return SmsModel(
       sender: sender ?? this.sender,
@@ -46,6 +51,7 @@ class SmsModel extends HiveObject {
       amount: amount ?? this.amount,
       type: type ?? this.type,
       tag: tag ?? this.tag,
+      bank: bank ?? this.bank,
     );
   }
 }
