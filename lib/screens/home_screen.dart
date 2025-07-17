@@ -42,6 +42,7 @@ const tagIconMap = {
   'education': Icons.school,
   'fuel': Icons.local_gas_station,
   'fitness': Icons.fitness_center,
+  'Untagged':Icons.label_off
 
 
 };
@@ -290,6 +291,7 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
           ),
           Row(
             children: [
+
               // Month Dropdown
               Container(
                 height: MediaQuery.of(context).size.width / 14,

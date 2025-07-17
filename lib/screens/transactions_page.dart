@@ -24,7 +24,7 @@ const tagIconMap = {
   'education': Icons.school,
   'fuel': Icons.local_gas_station,
   'fitness': Icons.fitness_center,
-  'clothing': Icons.shopping_bag,
+  'Untagged':Icons.label_off
 
 
 };
@@ -218,8 +218,19 @@ class _TransactionsPageState extends State<TransactionsPage> {
     if (startDate != null && sms.receivedAt.isBefore(startDate!)) return false;
     if (endDate != null && sms.receivedAt.isAfter(endDate!)) return false;
     if (selectedTags.isNotEmpty && !selectedTags.contains(sms.tag)) return false;
+    if (searchQuery.isNotEmpty) {
+      final q = searchQuery.toLowerCase();
+      final sender = sms.sender?.toLowerCase() ?? '';
+      final tag = sms.tag?.toLowerCase() ?? '';
+      final amount = sms.amount?.toString() ?? '';
+      if (!(sender.contains(q) || tag.contains(q) || amount.contains(q))) {
+        return false;
+      }
+    }
     return true;
   }
+  String searchQuery = '';
+
 
   @override
   Widget build(BuildContext context) {
@@ -237,116 +248,172 @@ class _TransactionsPageState extends State<TransactionsPage> {
           style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
         ),
         centerTitle: true,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.filter_list, color: Colors.black),
-            onPressed: _openFilterSheet,
-          ),
-        ],
+
       ),
 
-      body: ValueListenableBuilder(
-        valueListenable: Hive.box<SmsModel>('smsBox').listenable(),
-        builder: (context, Box<SmsModel> box, _) {
-          final messages = box.values.where(_matchesFilters).toList()
-            ..sort((a, b) => b.receivedAt.compareTo(a.receivedAt));
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            child: TextField(
+              decoration: InputDecoration(
+                prefixIcon: Icon(Icons.search),
+                suffixIcon: Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Color.fromRGBO(255, 255, 255, 1.0),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(width:3,color: Color.fromRGBO(
+                          0, 225, 190, 1.0)),
+                    ),
+                    child: IconButton(
+                      icon: const Icon(Icons.tune_rounded, color: Color.fromRGBO(
+                          3, 144, 170, 1.0)),
+                      onPressed: _openFilterSheet,
 
-          return Container(
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-            ),
-            child: messages.isEmpty
-                ? const Center(
-              child: Padding(
-                padding: EdgeInsets.only(top: 100),
-                child: Text(
-                  "No transactions match filters",
-                  style: TextStyle(color: Colors.black54),
-                ),
-              ),
-            )
-                : ListView.builder(
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              itemCount: messages.length,
-              itemBuilder: (context, index) {
-                final sms = messages[index];
-                final isCredit = sms.type == 'credit';
-                final time = DateFormat('hh:mm a dd, MMM').format(sms.receivedAt);
-
-                final tagBox = Hive.box<Map>('tagBox');
-                final iconCode = tagBox.get('customTags')?[sms.tag] ??
-                    tagIconMap[sms.tag?.toLowerCase()]?.codePoint ??
-                    Icons.label.codePoint;
-                final tagIcon = Icon(
-                  IconData(iconCode, fontFamily: 'MaterialIcons'),
-                  color: Colors.white,
-                );
-
-                return GestureDetector(
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => TransactionDetailPage(transaction: sms),
                     ),
                   ),
-                  child: Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      image: DecorationImage(image: Image.asset('assets/transcations_card.png').image ,fit: BoxFit.cover),
-                      color: cardBg,
-                      borderRadius: BorderRadius.circular(12),
+                ),
+                hintText: 'Search transactions',
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              onChanged: (value) {
+                setState(() => searchQuery = value.trim().toLowerCase());
+              },
+            ),
+          ),
+          Expanded(
+            child: ValueListenableBuilder(
+              valueListenable: Hive.box<SmsModel>('smsBox').listenable(),
+              builder: (context, Box<SmsModel> box, _) {
+                final messages = box.values.where(_matchesFilters).toList();
+                if (searchQuery.isNotEmpty) {
+                  final q = searchQuery.toLowerCase();
+                  messages.sort((a, b) {
+                    final aSender = a.sender?.toLowerCase() ?? '';
+                    final bSender = b.sender?.toLowerCase() ?? '';
+
+                    // Highest priority: sender STARTS with q
+                    final aStarts = aSender.startsWith(q);
+                    final bStarts = bSender.startsWith(q);
+
+                    if (aStarts && !bStarts) return -1;
+                    if (!aStarts && bStarts) return 1;
+
+                    // Secondary: sender contains q (not at start)
+                    final aContains = aSender.contains(q);
+                    final bContains = bSender.contains(q);
+
+                    if (aContains && !bContains) return -1;
+                    if (!aContains && bContains) return 1;
+
+                    // Fallback: original order (most recent first)
+                    return b.receivedAt.compareTo(a.receivedAt);
+                  });
+                } else {
+                  messages.sort((a, b) => b.receivedAt.compareTo(a.receivedAt));
+                }
+
+                return Container(
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                  ),
+                  child: messages.isEmpty
+                      ? const Center(
+                    child: Padding(
+                      padding: EdgeInsets.only(top: 100),
+                      child: Text(
+                        "No transactions match filters",
+                        style: TextStyle(color: Colors.black54),
+                      ),
                     ),
-                    child: Row(
-                      children: [
-                        CircleAvatar(
-                          backgroundColor: Colors.white24,
-                          child: tagIcon,
+                  )
+                      : ListView.builder(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    itemCount: messages.length,
+                    itemBuilder: (context, index) {
+                      final sms = messages[index];
+                      final isCredit = sms.type == 'credit';
+                      final time = DateFormat('hh:mm a dd, MMM').format(sms.receivedAt);
+
+                      final tagBox = Hive.box<Map>('tagBox');
+                      final iconCode = tagBox.get('customTags')?[sms.tag] ??
+                          tagIconMap[sms.tag?.toLowerCase()]?.codePoint ??
+                          Icons.label.codePoint;
+                      final tagIcon = Icon(
+                        IconData(iconCode, fontFamily: 'MaterialIcons'),
+                        color: Colors.white,
+                      );
+
+                      return GestureDetector(
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => TransactionDetailPage(transaction: sms),
+                          ),
                         ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                        child: Container(
+                          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            image: DecorationImage(image: Image.asset('assets/transcations_card.png').image ,fit: BoxFit.cover),
+                            color: cardBg,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Row(
                             children: [
-                              Text(
-                                isCredit
-                                    ? 'Received from ${sms.sender}'
-                                    : 'Paid to ${sms.sender}',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
+                              CircleAvatar(
+                                backgroundColor: Colors.white24,
+                                child: tagIcon,
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      isCredit
+                                          ? 'Received from ${sms.sender}'
+                                          : 'Paid to ${sms.sender}',
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    Text(sms.tag ?? 'Untagged',
+                                        style: TextStyle(color: subTextColor, fontSize: 12)),
+                                    Text(time,
+                                        style: TextStyle(color: subTextColor, fontSize: 10)),
+                                  ],
                                 ),
                               ),
-                              Text(sms.tag ?? 'Untagged',
-                                  style: TextStyle(color: subTextColor, fontSize: 12)),
-                              Text(time,
-                                  style: TextStyle(color: subTextColor, fontSize: 10)),
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: isCredit ? Colors.green : Colors.red,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text(
+                                  (isCredit ? '+' : '-') +
+                                      '₹${sms.amount?.toStringAsFixed(2) ?? '0.00'}',
+                                  style: const TextStyle(
+                                      color: Colors.white, fontWeight: FontWeight.bold),
+                                ),
+                              ),
                             ],
                           ),
                         ),
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: isCredit ? Colors.green : Colors.red,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            (isCredit ? '+' : '-') +
-                                '₹${sms.amount?.toStringAsFixed(2) ?? '0.00'}',
-                            style: const TextStyle(
-                                color: Colors.white, fontWeight: FontWeight.bold),
-                          ),
-                        ),
-                      ],
-                    ),
+                      );
+                    },
                   ),
                 );
               },
             ),
-          );
-        },
+          ),
+        ],
       ),
 
     );
